@@ -1,0 +1,45 @@
+# --- Python ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pdb
+
+# --- Virtual Environments ---
+.venv/
+venv/
+env/
+
+# --- uv (lockfiles bleiben, cache nicht) ---
+.uv/
+uv_cache/
+
+# --- SQLite Datenbanken ---
+*.db
+*.db-shm
+*.db-wal
+
+# aber falls du eine Beispiel-DB behalten willst:
+# !social.db        # <- falls behalten, sonst ignorieren
+
+# --- Testing / Pytest ---
+.pytest_cache/
+test_social.db
+
+# --- Coverage ---
+htmlcov/
+.coverage
+.coverage.*
+
+# --- VSCode ---
+.vscode/
+.code-workspace
+
+# --- OS / Editor ---
+Thumbs.db
+.DS_Store
+
+# --- Build/Dist ---
+dist/
+build/
+*.egg-info/
