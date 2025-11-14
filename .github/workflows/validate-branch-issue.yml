@@ -37,26 +37,49 @@ jobs:
 
       - uses: actions/checkout@v4
 
-      - name: Check LAST non-merge commit contains issue number
+      - name: Check commit messages contain issue number
         run: |
           BRANCH="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
 
-          # Issue number from branch name
+          # Issue-Nummer aus Branch holen, z.B. feature/2-xyz -> 2
           ISSUE_NUM="$(echo "$BRANCH" | sed -E 's@^[^/]+/([0-9]+)-.*@\1@')"
           echo "Expected issue number: #$ISSUE_NUM"
-
-          # Find last NON-MERGE commit (no parents count 2)
-          LAST_REAL_COMMIT="$(git log --no-merges -1 --format='%H')"
-          LAST_MSG="$(git log -1 --format='%s' "$LAST_REAL_COMMIT")"
-
-          echo "Last NON-MERGE commit message:"
-          echo "$LAST_MSG"
           echo
 
-          echo "$LAST_MSG" | grep "#$ISSUE_NUM" > /dev/null 2>&1
+          # Commit-Range bestimmen, je nach Event-Typ
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            BEFORE="${{ github.event.before }}"
+            SHA="$GITHUB_SHA"
+            RANGE="$BEFORE..$SHA"
+            echo "Checking commits in push range: $RANGE"
+          else
+            BASE="$GITHUB_BASE_REF"
+            echo "Fetching base branch origin/$BASE ..."
+            git fetch origin "$BASE" --depth=1
+            RANGE="origin/$BASE..HEAD"
+            echo "Checking commits in PR range: $RANGE"
+          fi
+
+          echo
+
+          COMMITS="$(git log --format='%s' $RANGE || true)"
+
+          if [ -z "$COMMITS" ]; then
+            echo "ℹ️ No commits found in range (nothing to check)."
+            exit 0
+          fi
+
+          echo "Commit messages in range:"
+          echo "$COMMITS"
+          echo
+
+          # Prüfen, ob mindestens eine Commit-Message #ISSUE_NUM enthält
+          echo "$COMMITS" | grep "#$ISSUE_NUM" > /dev/null 2>&1
           if [ $? -ne 0 ]; then
-            echo "❌ Commit message does NOT contain #$ISSUE_NUM."
+            echo "❌ No commit message contains #$ISSUE_NUM."
+            echo "   Please add the issue number to at least one commit message,"
+            echo "   e.g. \"Something useful (#$ISSUE_NUM)\"."
             exit 1
           fi
 
-          echo "✅ Non-merge commit contains #$ISSUE_NUM."
+          echo "✅ At least one commit message contains #$ISSUE_NUM."
