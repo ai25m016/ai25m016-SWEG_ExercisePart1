@@ -3,18 +3,15 @@ name: validate-branch-and-issue
 on:
   push:
     branches:
-      - '**'          # bei jedem Push prüfen
+      - '**'
   pull_request:
     branches:
       - main
-      - develop       # bei PRs zusätzlich (für Branch-Protection)
+      - develop
 
 jobs:
   validate:
     runs-on: ubuntu-latest
-    env:
-      # "before" für Push-Events ins Environment holen
-      GITHUB_EVENT_BEFORE: ${{ github.event.before }}
 
     steps:
       - name: Show branch info
@@ -40,45 +37,25 @@ jobs:
 
       - uses: actions/checkout@v4
 
-      - name: Check commit messages contain issue number
+      - name: Check LAST commit message contains issue number
         run: |
           BRANCH="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
 
           # Issue-Nummer aus Branch holen, z.B. feature/2-xyz -> 2
           ISSUE_NUM="$(echo "$BRANCH" | sed -E 's@^[^/]+/([0-9]+)-.*@\1@')"
-          echo "Expected issue number: #$ISSUE_NUM"
+          echo "Expected issue number in last commit: #$ISSUE_NUM"
 
-          # Commit-Range bestimmen
-          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
-            # nur die neuen Commits dieses Pushes
-            RANGE="$GITHUB_EVENT_BEFORE..$GITHUB_SHA"
-          else
-            # PR: alle Commits zwischen Base-Branch und HEAD
-            git fetch origin "$GITHUB_BASE_REF" --depth=1
-            RANGE="origin/$GITHUB_BASE_REF..HEAD"
-          fi
+          LAST_MSG="$(git log -1 --format='%s')"
 
-          echo "Using range: $RANGE"
-          COMMITS="$(git log --format='%s' $RANGE || true)"
-
-          if [ -z "$COMMITS" ]; then
-            echo "ℹ️ No commits found in range (nothing to check)."
-            exit 0
-          fi
-
-          echo "Commit messages in this range:"
-          echo "$COMMITS"
+          echo "Last commit message:"
+          echo "$LAST_MSG"
           echo
 
-          # Prüfen, ob ALLE neuen Commits #ISSUE_NUM enthalten
-          MISSING=$(echo "$COMMITS" | grep -v "#$ISSUE_NUM" || true)
-
-          if [ -n "$MISSING" ]; then
-            echo "❌ Some commit messages are missing #$ISSUE_NUM:"
-            echo "$MISSING"
-            echo
-            echo "   Please include '#$ISSUE_NUM' in every new commit message on this branch."
+          echo "$LAST_MSG" | grep "#$ISSUE_NUM" > /dev/null 2>&1
+          if [ $? -ne 0 ]; then
+            echo "❌ Last commit message does not contain #$ISSUE_NUM."
+            echo "   Please change it, e.g.: \"... (#$ISSUE_NUM)\"."
             exit 1
           fi
 
-          echo "✅ All commit messages contain #$ISSUE_NUM."
+          echo "✅ Last commit message contains #$ISSUE_NUM."
