@@ -1,0 +1,82 @@
+name: validate-branch-and-issue
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Show branch info
+        run: |
+          echo "Event: $GITHUB_EVENT_NAME"
+          echo "Ref:   $GITHUB_REF"
+          echo "Base:  $GITHUB_BASE_REF"
+          echo "Head:  $GITHUB_HEAD_REF"
+
+      - name: Check branch name pattern
+        run: |
+          BRANCH="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+          echo "Checking branch name: $BRANCH"
+
+          # Erlaubte Branch-Typen: feature/NUM-..., bugfix/NUM-..., hotfix/NUM-..., release/NUM-...
+          if echo "$BRANCH" | grep -Eq '^(feature|bugfix|hotfix|release)/[0-9]+-'; then
+            echo "✅ Branch name is valid."
+          else
+            echo "❌ Invalid branch name."
+            echo "   Expected: feature/2-something, bugfix/3-other, hotfix/10-..., release/1-0-0-..."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      # ✅ Commit-Messages NUR bei Push prüfen, NICHT beim PR-Event
+      - name: Check commit messages contain issue number (only on push)
+        if: ${{ github.event_name == 'push' }}
+        run: |
+          BRANCH="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+
+          # Issue-Nummer aus Branch holen, z.B. feature/2-xyz -> 2
+          ISSUE_NUM="$(echo "$BRANCH" | sed -E 's@^[^/]+/([0-9]+)-.*@\1@')"
+          echo "Expected issue number: #$ISSUE_NUM"
+          echo
+
+          BEFORE="${{ github.event.before }}"
+          SHA="$GITHUB_SHA"
+
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            RANGE="$SHA^..$SHA"
+          else
+            RANGE="$BEFORE..$SHA"
+          fi
+
+          echo "Checking commits in push range: $RANGE"
+          echo
+
+          COMMITS="$(git log --format='%s' $RANGE || true)"
+
+          if [ -z "$COMMITS" ]; then
+            echo "ℹ️ No commits found in range (nothing to check)."
+            exit 0
+          fi
+
+          echo "Commit messages in range:"
+          echo "$COMMITS"
+          echo
+
+          echo "$COMMITS" | grep "#$ISSUE_NUM" > /dev/null 2>&1
+          if [ $? -ne 0 ]; then
+            echo "❌ No commit message in this push contains #$ISSUE_NUM."
+            echo "   Please include the issue number in your commit message,"
+            echo "   e.g. \"Something useful (#$ISSUE_NUM)\"."
+            exit 1
+          fi
+
+          echo "✅ At least one commit message from this push contains #$ISSUE_NUM."
