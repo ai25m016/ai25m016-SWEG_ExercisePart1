@@ -1,13 +1,28 @@
-name: tests
+name: backend-tests
 
 on:
+  push:
+    branches:
+      - 'feature/**'
+      - 'bugfix/**'
+      - 'hotfix/**'
+      - 'release/**'
+    paths:
+      - 'backend/**'
+      - '.github/workflows/backend-tests.yml'
   pull_request:
-    branches: ["**"]   # Tests laufen NUR bei Pull Requests, egal auf welchen Branch
+    branches:
+      - main
+      - develop
+
 
 jobs:
   test:
     runs-on: ubuntu-latest
-
+    defaults:
+      run:
+        working-directory: ./backend
+        
     steps:
       - uses: actions/checkout@v4
 

@@ -1,17 +1,17 @@
 from pathlib import Path
 import importlib, sqlite3
 from fastapi.testclient import TestClient
-from simple_social.api import app
+from simple_social_backend.api import app
 
 def setup_module(_):
-    db = importlib.import_module("simple_social.db")
+    db = importlib.import_module("simple_social_backend.db")
     test_db = Path(__file__).parent / "test_social.db"
     db.DB_PATH = test_db
     if test_db.exists(): test_db.unlink()
     db.init_db()
 
 def teardown_module(_):
-    db = importlib.import_module("simple_social.db")
+    db = importlib.import_module("simple_social_backend.db")
     try: sqlite3.connect(db.DB_PATH).close()
     except Exception: pass
     for p in [db.DB_PATH, db.DB_PATH.with_suffix(".db-wal"), db.DB_PATH.with_suffix(".db-shm")]:
