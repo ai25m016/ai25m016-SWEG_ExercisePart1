@@ -16,7 +16,7 @@ def start_api():
     os.environ.setdefault("PYTHONPATH", str(src_path))
 
     uvicorn.run(
-        "simple_social.api:app",
+        "simple_social_backend.api:app",
         host="127.0.0.1",
         port=8000,
         reload=True,
