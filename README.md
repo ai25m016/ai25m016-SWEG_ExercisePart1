@@ -25,13 +25,6 @@ Ziel: Drei Posts speichern und den neuesten Post per API abrufen.
 py -m uv sync
 ```
 
-Falls die CLI-Tools (social-api, social-seed) benutzt werden wollen:
-```
-py -m uv run python -m pip install -e .
-```
-
-
-
 ## ▶️ API starten
 
 ```
