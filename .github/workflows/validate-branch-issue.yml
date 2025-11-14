@@ -37,7 +37,9 @@ jobs:
 
       - uses: actions/checkout@v4
 
-      - name: Check commit messages contain issue number
+      # ✅ Commit-Messages NUR bei Push prüfen, NICHT beim PR-Event
+      - name: Check commit messages contain issue number (only on push)
+        if: ${{ github.event_name == 'push' }}
         run: |
           BRANCH="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
 
@@ -46,20 +48,16 @@ jobs:
           echo "Expected issue number: #$ISSUE_NUM"
           echo
 
-          # Commit-Range bestimmen, je nach Event-Typ
-          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
-            BEFORE="${{ github.event.before }}"
-            SHA="$GITHUB_SHA"
-            RANGE="$BEFORE..$SHA"
-            echo "Checking commits in push range: $RANGE"
+          BEFORE="${{ github.event.before }}"
+          SHA="$GITHUB_SHA"
+
+          if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            RANGE="$SHA^..$SHA"
           else
-            BASE="$GITHUB_BASE_REF"
-            echo "Fetching base branch origin/$BASE ..."
-            git fetch origin "$BASE" --depth=1
-            RANGE="origin/$BASE..HEAD"
-            echo "Checking commits in PR range: $RANGE"
+            RANGE="$BEFORE..$SHA"
           fi
 
+          echo "Checking commits in push range: $RANGE"
           echo
 
           COMMITS="$(git log --format='%s' $RANGE || true)"
@@ -73,13 +71,12 @@ jobs:
           echo "$COMMITS"
           echo
 
-          # Prüfen, ob mindestens eine Commit-Message #ISSUE_NUM enthält
           echo "$COMMITS" | grep "#$ISSUE_NUM" > /dev/null 2>&1
           if [ $? -ne 0 ]; then
-            echo "❌ No commit message contains #$ISSUE_NUM."
-            echo "   Please add the issue number to at least one commit message,"
+            echo "❌ No commit message in this push contains #$ISSUE_NUM."
+            echo "   Please include the issue number in your commit message,"
             echo "   e.g. \"Something useful (#$ISSUE_NUM)\"."
             exit 1
           fi
 
-          echo "✅ At least one commit message contains #$ISSUE_NUM."
+          echo "✅ At least one commit message from this push contains #$ISSUE_NUM."
