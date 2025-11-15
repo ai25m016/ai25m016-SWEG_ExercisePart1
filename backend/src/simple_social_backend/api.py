@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import List
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from .db import (
@@ -41,6 +42,18 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+origins = [
+    "http://127.0.0.1:5500",
+    "http://localhost:5500",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,      # or ["*"] for quick dev tests
+    allow_credentials=True,
+    allow_methods=["*"],        # important: includes GET, POST, OPTIONS, ...
+    allow_headers=["*"],
+)
 
 @app.post("/posts", response_model=PostOut, summary="Create a new post")
 def create_post(post: PostIn):
