@@ -8,7 +8,7 @@ Ziel: Drei Posts speichern und den neuesten Post per API abrufen.
 ## ✅ Features
 🚀 Features
 
-- CRUD-ähnliche API (Create + Get latest)
+- CRUD API (Create + Get latest)
 - FastAPI + SQLModel + SQLite
 - Seed-Script (social-seed) zum Befüllen der DB
 - Tests mit pytest
@@ -28,6 +28,7 @@ py -m uv sync
 ## ▶️ API starten
 
 ```
+cd backend
 py -m uv run social-api
 ```
 
@@ -37,33 +38,13 @@ Server läuft dann unter:
 * ReDoc: http://127.0.0.1:8000/redoc
 * OpenAPI Spec: http://127.0.0.1:8000/openapi.json
 
+## Frontend starten
 
-## 📡 API Endpoints
-### POST /posts
-
-Erstellt einen neuen Post.
-
-#### Beispiel-JSON:
 ```
-{
-  "image": "images/cat.png",
-  "text": "Süße Katze!",
-  "user": "alice"
-}
+python -m http.server 5500
 ```
 
-#### Beispiel-Call via curl:
-```
-curl -X POST http://127.0.0.1:8000/posts \
-  -H "Content-Type: application/json" \
-  -d "{\"image\":\"images/cat.png\", \"text\":\"Süße Katze!\", \"user\":\"alice\"}"
-```
-### GET /posts/latest
-
-Gibt den zuletzt gespeicherten Post zurück.
-```
-curl http://127.0.0.1:8000/posts/latest
-```
+* Frontend Weboberfläche: http://127.0.0.1:5500
 
 ## 🌱 Seed Script
 
@@ -74,6 +55,7 @@ m uv run social-seed
 Es werden drei Beispiel-Posts eingefügt.
 
 ## 🧪 Tests ausführen
+### Backend
 ```
 py -m uv run pytest -q
 ```
@@ -84,23 +66,44 @@ py -m uv run pytest -q
 
 - Keine Konflikte mit deiner echten social.db
 
+### Frontend
+```
+npx playwright test
+```
+
+- Führt alle Playwright tests aus, die im Projekt gefunden werden
+
+- Führt die Tests in einem headless Browser aus
+
 ## 🗂️ Projektstruktur
 ```
 simple_social/
-│
-├── src/simple_social/
-│   ├── api.py          # FastAPI Endpoints
-│   ├── db.py           # SQLModel DB-Anbindung
-│   ├── models.py       # Post SQLModel Klasse
-│   ├── cli.py          # Seed-Script
-│   └── __init__.py
-│
-├── tests/
-│   ├── test_api.py     # API Tests
-│   └── conftest.py
-│
-├── pyproject.toml      # Dependencies & Script entrypoints
-└── README.md
+.
+├── backend
+│   ├── main.py
+│   ├── pyproject.toml
+│   ├── social.db
+│   ├── src
+│   │   └── simple_social_backend
+│   ├── tests
+│   │   └── test_api.py
+│   └── uv.lock
+├── frontend
+│   ├── index.html
+│   ├── node_modules
+│   │   ├── @playwright
+│   │   ├── playwright
+│   │   └── playwright-core
+│   ├── package-lock.json
+│   ├── package.json
+│   ├── test-results
+│   └── tests
+│       └── posts.spec.js
+├── hooks
+│   └── commit-msg
+├── README.md
+└── scripts
+    └── install_hooks.sh
 ```
 
 ## 🤖 GitHub Actions
@@ -148,3 +151,32 @@ Neu synchronisieren (alles neu installieren):
 ```
 py -m uv sync --clean
 ```
+
+# Git Hooks
+
+Dieses Repository verwendet einen Git-Hook, um sicherzustellen, dass Commit-Messages zu Feature-/Bugfix-/Hotfix-/Release-Branches immer die passende Issue-Nummer enthalten.
+
+### Branch-Namenskonvention
+
+Der Hook greift nur auf Branches, die diesem Schema folgen:
+
+- `feature/<ISSUE>-beschreibung`
+- `bugfix/<ISSUE>-beschreibung`
+- `hotfix/<ISSUE>-beschreibung`
+- `release/<ISSUE>-beschreibung`
+
+Beispiele:
+
+- `feature/12-neue-login-maske`
+- `bugfix/34-nullpointer-beim-start`
+- `hotfix/7-falscher-text-im-banner`
+- `release/5-version-1-2-0`
+
+Die Issue-Nummer ist immer die Zahl direkt nach dem `/`, also z. B. `12` in `feature/12-neue-login-maske`.
+
+### Commit-Message-Konvention
+
+Wenn du auf einem dieser Branches committest, **muss** die erste Zeile der Commit-Message die Issue-Nummer in der Form `#<ISSUE>` enthalten.
+
+Beispiel für eine gültige Commit-Message auf Branch `feature/12-neue-login-maske`:
+
