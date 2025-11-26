@@ -26,12 +26,12 @@ jobs:
           BRANCH="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
           echo "Checking branch name: $BRANCH"
 
-          # Erlaubte Branch-Typen: feature/NUM-..., bugfix/NUM-..., hotfix/NUM-..., release/NUM-...
-          if echo "$BRANCH" | grep -Eq '^(feature|bugfix|hotfix|release)/[0-9]+-'; then
+          # Erlaubte Branch-Typen: feature/NUM-..., bugfix/NUM-..., hotfix/NUM-..., release/NUM-..., docs/NUM-...
+          if echo "$BRANCH" | grep -Eq '^(feature|bugfix|hotfix|release|docs)/[0-9]+-'; then
             echo "✅ Branch name is valid."
           else
             echo "❌ Invalid branch name."
-            echo "   Expected: feature/2-something, bugfix/3-other, hotfix/10-..., release/1-0-0-..."
+            echo "   Expected: feature/2-something, bugfix/3-other, hotfix/10-..., release/1-0-0-..., docs/1-something"
             exit 1
           fi
 
