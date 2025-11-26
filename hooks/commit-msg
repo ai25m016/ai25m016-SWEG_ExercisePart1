@@ -5,8 +5,8 @@ MSG="$(head -n 1 "$MSG_FILE")"
 BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 
 case "$BRANCH" in
-  feature/*|bugfix/*|hotfix/*|release/*)
-    if echo "$BRANCH" | grep -Eq '^(feature|bugfix|hotfix|release)/[0-9]+-'; then
+  feature/*|bugfix/*|hotfix/*|release/*|docs/*)
+    if echo "$BRANCH" | grep -Eq '^(feature|bugfix|hotfix|release|docs)/[0-9]+-'; then
       ISSUE_NUM="$(echo "$BRANCH" | sed -E 's@^[^/]+/([0-9]+)-.*@\1@')"
       
       if ! echo "$MSG" | grep -q "#$ISSUE_NUM"; then
