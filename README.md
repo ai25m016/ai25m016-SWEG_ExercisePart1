@@ -40,8 +40,14 @@ Server läuft dann unter:
 
 ## Frontend starten
 
+Container build (fronm project root)
 ```
-python -m http.server 5500
+docker build -t simple-social-frontend ./frontend
+```
+
+Container starten
+```
+docker run --rm -p 5500:80 simple-social-frontend
 ```
 
 * Frontend Weboberfläche: http://127.0.0.1:5500
@@ -89,6 +95,7 @@ simple_social/
 │   │   └── test_api.py
 │   └── uv.lock
 ├── frontend
+│   ├── Dockerfile
 │   ├── index.html
 │   ├── node_modules
 │   │   ├── @playwright
