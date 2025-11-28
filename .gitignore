@@ -43,3 +43,41 @@ Thumbs.db
 dist/
 build/
 *.egg-info/
+
+
+# --- Frontend / Node ---
+frontend/node_modules/
+frontend/.npm/
+frontend/.pnpm-store/
+frontend/.yarn/
+frontend/.yarn-cache/
+
+# Lockfiles: meist versioniert – nur ignorieren, wenn ihr das NICHT wollt
+# frontend/package-lock.json
+# frontend/pnpm-lock.yaml
+# frontend/yarn.lock
+
+# Build-Output (je nach Tool)
+frontend/dist/
+frontend/build/
+frontend/.parcel-cache/
+frontend/.next/
+frontend/out/
+frontend/.nuxt/
+frontend/.vite/
+frontend/coverage/
+
+# Frontend-Testing / Tools
+frontend/.eslintcache
+frontend/junit.xml
+frontend/.nyc_output/
+
+# IDE/Editor im Frontend-Ordner (falls separat angelegt)
+frontend/.vscode/
+frontend/.idea/
+
+# Editor-Swap / temporär
+*.swp
+
+# Export-Artefakte (falls nur Output)
+exporting/
