@@ -8,13 +8,95 @@ Ziel: Drei Posts speichern und den neuesten Post per API abrufen.
 ## ✅ Features
 🚀 Features
 
-- CRUD API (Create + Get latest)
+- CRUD API
 - FastAPI + SQLModel + SQLite
 - Seed-Script (social-seed) zum Befüllen der DB
 - Tests mit pytest
 - GitHub Actions Workflow für Pull-Request-Tests
 - Automatisch generierte Swagger-UI & ReDoc
 - Reproduzierbare Python-Umgebung mit uv
+
+---
+## 1️⃣ Lokal: Backend ohne Docker laufen lassen
+
+### API starten (ohne Docker):
+```
+cd backend
+py -m uv run social-api
+```
+
+→ Läuft auf http://127.0.0.1:8000.
+
+### Tests ohne Docker:
+```
+cd backend
+py -m uv run pytest -q
+```
+
+
+## 2️⃣ Lokal: Backend mit Docker laufen lassen
+
+### Image bauen (machst du ja schon):
+```bash
+cd simple_social
+docker build -t simple-social-backend -f backend/Dockerfile .
+```
+
+### API im Container starten:
+```bash
+docker run --rm -p 8000:8000 simple-social-backend
+```
+
+→ Läuft auf http://127.0.0.1:8000/docs.
+
+### Tests im Container laufen lassen:
+```bash
+docker run --rm simple-social-backend uv run pytest -q
+# oder gezielt
+docker run --rm simple-social-backend uv run pytest -q tests/test_api.py
+```
+
+## 3️⃣ GitHub: Tests ohne Docker (backend-tests.yml)
+
+- Läuft bei Push auf
+`main`, develop, `feature/**`, `bugfix/**`, `hotfix/**`, `release/**`
+
+- Läuft bei Pull Requests nach `main` / `develop`
+
+- Führt im Job `test` aus:
+```bash
+uv sync ...
+uv run pytest -q
+```
+
+➡️ Backend wird auf GitHub ohne Docker getestet.
+
+
+## 4️⃣ GitHub: Tests mit Docker + Artefakt (backend-docker.yml)
+
+Läuft bei denselben Events (push + pull_request auf deine Branches)
+
+- Job `test-in-docker`:
+
+    - baut dein Docker-Image im GitHub-Runner
+
+    - führt darin `uv run pytest -q` aus
+➜ Tests im Container ✅
+
+- Job `build-and-push`:
+    - hat needs: `test-in-docker` → startet nur, wenn die Tests OK sind
+
+    - hat zusätzlich:
+```yaml
+if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+```
+
+➜ Nur bei Push/Merge auf `main`:
+
+- Docker-Image wird gebaut
+
+- und nach GHCR gepusht (`ghcr.io/.../simple-social-backend:latest` + SHA-Tag)
+
 
 ---
 
@@ -40,14 +122,8 @@ Server läuft dann unter:
 
 ## Frontend starten
 
-Container build (fronm project root)
 ```
-docker build -t simple-social-frontend ./frontend
-```
-
-Container starten
-```
-docker run --rm -p 5500:80 simple-social-frontend
+python -m http.server 5500
 ```
 
 * Frontend Weboberfläche: http://127.0.0.1:5500
@@ -95,7 +171,6 @@ simple_social/
 │   │   └── test_api.py
 │   └── uv.lock
 ├── frontend
-│   ├── Dockerfile
 │   ├── index.html
 │   ├── node_modules
 │   │   ├── @playwright
@@ -186,4 +261,3 @@ Die Issue-Nummer ist immer die Zahl direkt nach dem `/`, also z. B. `12` in `fea
 Wenn du auf einem dieser Branches committest, **muss** die erste Zeile der Commit-Message die Issue-Nummer in der Form `#<ISSUE>` enthalten.
 
 Beispiel für eine gültige Commit-Message auf Branch `feature/12-neue-login-maske`:
-
