@@ -10,11 +10,11 @@ echo "Installing Git hooks from $HOOKS_SRC to $HOOKS_DST"
 
 mkdir -p "$HOOKS_DST"
 
-for hook in commit-msg; do
+for hook in commit-msg pre-push; do
   if [ -f "$HOOKS_SRC/$hook" ]; then
     cp "$HOOKS_SRC/$hook" "$HOOKS_DST/$hook"
     chmod +x "$HOOKS_DST/$hook"
-    echo "  → installed $hook"
+    echo "  -> installed $hook"
   fi
 done
 

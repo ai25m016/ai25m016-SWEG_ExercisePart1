@@ -15,14 +15,10 @@ on:
       - main
       - develop
 
-
 jobs:
   test:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./backend
-        
+
     steps:
       - uses: actions/checkout@v4
 
@@ -33,8 +29,5 @@ jobs:
       - name: Install uv
         run: pip install -U uv
 
-      - name: Sync deps
-        run: uv sync --all-extras --dev
-
-      - name: Run tests
-        run: uv run pytest -q
+      - name: Run backend tests (shared script)
+        run: ./scripts/run_tests.sh backend
