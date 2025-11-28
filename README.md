@@ -261,3 +261,11 @@ Die Issue-Nummer ist immer die Zahl direkt nach dem `/`, also z. B. `12` in `fea
 Wenn du auf einem dieser Branches committest, **muss** die erste Zeile der Commit-Message die Issue-Nummer in der Form `#<ISSUE>` enthalten.
 
 Beispiel für eine gültige Commit-Message auf Branch `feature/12-neue-login-maske`:
+
+
+## Lokaler pre-push-Hook mit Switch
+
+git config --local hook.tests backend          # nur ohne Docker
+git config --local hook.tests backend-docker   # nur mit Docker
+git config --local hook.tests all              # wie jetzt: beide
+git config --local hook.tests none             # Tests aus (nur im Notfall)
