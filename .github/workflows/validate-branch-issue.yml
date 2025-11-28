@@ -20,18 +20,31 @@ jobs:
           echo "Ref:   $GITHUB_REF"
           echo "Base:  $GITHUB_BASE_REF"
           echo "Head:  $GITHUB_HEAD_REF"
+          echo "Ref name: $GITHUB_REF_NAME"
 
       - name: Check branch name pattern
         run: |
           BRANCH="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
           echo "Checking branch name: $BRANCH"
 
+          # main und develop explizit erlauben
+          if [ "$BRANCH" = "main" ] || [ "$BRANCH" = "develop" ]; then
+            echo "✅ Branch '$BRANCH' is allowed (main/develop)."
+            exit 0
+          fi
+
           # Erlaubte Branch-Typen: feature/NUM-..., bugfix/NUM-..., hotfix/NUM-..., release/NUM-..., docs/NUM-...
           if echo "$BRANCH" | grep -Eq '^(feature|bugfix|hotfix|release|docs)/[0-9]+-'; then
             echo "✅ Branch name is valid."
           else
-            echo "❌ Invalid branch name."
-            echo "   Expected: feature/2-something, bugfix/3-other, hotfix/10-..., release/1-0-0-..., docs/1-something"
+            echo "❌ Invalid branch name: $BRANCH"
+            echo "   Expected something like:"
+            echo "     feature/2-something"
+            echo "     bugfix/3-other"
+            echo "     hotfix/10-..."
+            echo "     release/1-0-0-..."
+            echo "     docs/1-something"
+            echo "     develop"
             exit 1
           fi
 
@@ -42,9 +55,23 @@ jobs:
         if: ${{ github.event_name == 'push' }}
         run: |
           BRANCH="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+          echo "Current branch: $BRANCH"
+
+          # Für main/develop (oder andere Sonder-Branches) optional früh rausgehen
+          if [ "$BRANCH" = "main" ] || [ "$BRANCH" = "develop" ]; then
+            echo "ℹ️ Branch '$BRANCH' has no issue number convention. Skipping commit message check."
+            exit 0
+          fi
 
           # Issue-Nummer aus Branch holen, z.B. feature/2-xyz -> 2
-          ISSUE_NUM="$(echo "$BRANCH" | sed -E 's@^[^/]+/([0-9]+)-.*@\1@')"
+          ISSUE_NUM="$(echo "$BRANCH" | sed -En 's@^[^/]+/([0-9]+)-.*@\1@p')"
+
+          if [ -z "$ISSUE_NUM" ]; then
+            echo "ℹ️ No issue number could be extracted from branch name '$BRANCH'."
+            echo "   Skipping commit message check."
+            exit 0
+          fi
+
           echo "Expected issue number: #$ISSUE_NUM"
           echo
 
