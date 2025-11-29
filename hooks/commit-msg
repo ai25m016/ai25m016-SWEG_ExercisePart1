@@ -1,18 +1,21 @@
 #!/bin/sh
 
 MSG_FILE="$1"
+# Nur die erste Zeile der Commit-Message prüfen
 MSG="$(head -n 1 "$MSG_FILE")"
 BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 
 case "$BRANCH" in
   feature/*|bugfix/*|hotfix/*|release/*|docs/*)
+    # Branch-Schema: typ/<nummer>-beschreibung
     if echo "$BRANCH" | grep -Eq '^(feature|bugfix|hotfix|release|docs)/[0-9]+-'; then
       ISSUE_NUM="$(echo "$BRANCH" | sed -E 's@^[^/]+/([0-9]+)-.*@\1@')"
-      
+
+      # Prüfen, ob in der ERSTEN ZEILE "#<ISSUE_NUM>" vorkommt
       if ! echo "$MSG" | grep -q "#$ISSUE_NUM"; then
         echo "❌ Commit abgebrochen."
         echo "    Branch: $BRANCH  → erwartete Issue-Nummer: #$ISSUE_NUM"
-        echo "    Bitte die Issue-Nummer in die erste Zeile der Commit-Message schreiben."
+        echo "    Die erste Zeile der Commit-Message muss die Issue-Nummer enthalten."
         echo "    Beispiel: \"Ordnerstruktur angepasst (#$ISSUE_NUM)\""
         exit 1
       fi
@@ -24,7 +27,16 @@ case "$BRANCH" in
     fi
     ;;
   *)
-    # Auf anderen Branches (main, develop, etc.) nichts prüfen
+    # alle anderen Branches sperren
+    echo "❌ Commit abgebrochen."
+    echo "    Auf Branch '$BRANCH' sind direkte Commits nicht erlaubt."
+    echo "    Erlaubte Branches:"
+    echo "      - feature/<nummer>-beschreibung"
+    echo "      - bugfix/<nummer>-beschreibung"
+    echo "      - hotfix/<nummer>-beschreibung"
+    echo "      - release/<nummer>-beschreibung"
+    echo "      - docs/<nummer>-beschreibung"
+    exit 1
     ;;
 esac
 
