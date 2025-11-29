@@ -1,0 +1,27 @@
+# .github/issue-branch.yml
+
+# ChatOps: Branch wird NUR erstellt, wenn du im Issue /cib kommentierst.
+mode: chatops
+
+# Grundschema für den Branchnamen (ohne Prefix):
+# Beispiel: "123-LED-blinkt-nicht"
+branchName: '${issue.number}-${issue.title,}'
+
+gitSafeReplacementChar: '-'
+
+# Prefix je nach Label:
+branches:
+  - label: enhancement        # z.B. Feature-Request
+    prefix: 'feature/'
+
+  - label: bug             # eigener Label-Name für Bugfix 
+    prefix: 'bugfix/'
+
+  - label: invalid                # klassisches Bug-Label → hotfix 
+    prefix: 'hotfix/'
+
+  - label: release            # Release-Issues
+    prefix: 'release/'
+
+  - label: documentation      # oder 'docs', je nachdem wie euer Label heißt
+    prefix: 'docs/'
