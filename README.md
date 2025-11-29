@@ -1,271 +1,267 @@
-# Simple Social – Mini Social REST API
 
-Eine kompakte Beispielanwendung mit FastAPI, SQLModel, SQLite, Tests und GitHub Actions.
-Ziel: Drei Posts speichern und den neuesten Post per API abrufen.
+# 🌐 Simple Social – Fullstack Demo (FastAPI + Frontend + Docker + Playwright + GitHub Actions)
+✨ Ein modernes Fullstack-Projekt mit REST API, Frontend, automatischen Tests, Docker und vollständig automatisierten CI/CD-Pipelines.
 
----
+## 🚀 Features
 
-## ✅ Features
-🚀 Features
+### 🧠 Backend (FastAPI)
+- SQLModel + SQLite
+- CRUD-Endpunkte
+- Seed-Script (social-seed)
+- Automatische OpenAPI-Dokumentation
+→ /docs, /redoc
 
-- CRUD API
-- FastAPI + SQLModel + SQLite
-- Seed-Script (social-seed) zum Befüllen der DB
-- Tests mit pytest
-- GitHub Actions Workflow für Pull-Request-Tests
-- Automatisch generierte Swagger-UI & ReDoc
-- Reproduzierbare Python-Umgebung mit uv
+### 🎨 Frontend
+- Einfaches HTML/JS-Frontend
+- End-to-End Tests mit Playwright
 
----
-## 1️⃣ Lokal: Backend ohne Docker laufen lassen
+### 🧪 Testing
+- Backend Tests (pytest)
+- Frontend E2E Tests (Playwright)
+- Docker-basierte Test-Pipelines
+- Required checks für PRs
 
-### API starten (ohne Docker):
-```
-cd backend
-py -m uv run social-api
-```
+### 🐳 Docker
+- Backend-Image
+- Frontend-Image
+- Lokales Compose-Setup
+- Release-Tags: vX.Y.Z, vX.Y.Z-rcN
 
-→ Läuft auf http://127.0.0.1:8000.
+### ⚙️ GitHub Actions
+- 8 vollständige CI/CD Workflows:
+  - Backend Tests (ohne Docker)
+  - Backend Tests (Docker)
+  - Backend Release Image
+  - Frontend Tests (ohne Docker)
+  - Frontend Tests (Docker)
+  - Frontend Release Image
+  - Branch + Issue Validation
+  - Issue → Branch Automation
 
-### Tests ohne Docker:
-```
-cd backend
-py -m uv run pytest -q
-```
+### 🔐 Git Hooks
+- Commit-Message Validator
+- Branch-Namen Validator
 
-
-## 2️⃣ Lokal: Backend mit Docker laufen lassen
-
-### Image bauen (machst du ja schon):
-```bash
-cd simple_social
-docker build -t simple-social-backend -f backend/Dockerfile .
-```
-
-### API im Container starten:
-```bash
-docker run --rm -p 8000:8000 simple-social-backend
-```
-
-→ Läuft auf http://127.0.0.1:8000/docs.
-
-### Tests im Container laufen lassen:
-```bash
-docker run --rm simple-social-backend uv run pytest -q
-# oder gezielt
-docker run --rm simple-social-backend uv run pytest -q tests/test_api.py
-```
-
-## 3️⃣ GitHub: Tests ohne Docker (backend-tests.yml)
-
-- Läuft bei Push auf
-`main`, develop, `feature/**`, `bugfix/**`, `hotfix/**`, `release/**`
-
-- Läuft bei Pull Requests nach `main` / `develop`
-
-- Führt im Job `test` aus:
-```bash
-uv sync ...
-uv run pytest -q
-```
-
-➡️ Backend wird auf GitHub ohne Docker getestet.
-
-
-## 4️⃣ GitHub: Tests mit Docker + Artefakt (backend-docker.yml)
-
-Läuft bei denselben Events (push + pull_request auf deine Branches)
-
-- Job `test-in-docker`:
-
-    - baut dein Docker-Image im GitHub-Runner
-
-    - führt darin `uv run pytest -q` aus
-➜ Tests im Container ✅
-
-- Job `build-and-push`:
-    - hat needs: `test-in-docker` → startet nur, wenn die Tests OK sind
-
-    - hat zusätzlich:
-```yaml
-if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-```
-
-➜ Nur bei Push/Merge auf `main`:
-
-- Docker-Image wird gebaut
-
-- und nach GHCR gepusht (`ghcr.io/.../simple-social-backend:latest` + SHA-Tag)
-
-
----
-
-## 📦 Installation
-
-### Projekt-Abhängigkeiten installieren:
+## 🛠️ Installation
+### 🔧 Backend Dependencies installieren
 ```
 py -m uv sync
 ```
 
-## ▶️ API starten
+### 🎭 Frontend Dependencies installieren
+```
+cd frontend
+npm install
+npx playwright install
+```
 
+## 🧩 Backend starten
+### ▶️ Ohne Docker
 ```
 cd backend
 py -m uv run social-api
 ```
 
-Server läuft dann unter:
+### 📍 API läuft:
+- http://localhost:8000
+- http://localhost:8000/docs
+- http://localhost:8000/redoc
 
-* Swagger UI: http://127.0.0.1:8000/docs
-* ReDoc: http://127.0.0.1:8000/redoc
-* OpenAPI Spec: http://127.0.0.1:8000/openapi.json
-
-## Frontend starten
-
+## 🐳 Backend in Docker starten
+### Image bauen
 ```
-python -m http.server 5500
+docker build -t simple-social-backend -f backend/Dockerfile .
 ```
 
-* Frontend Weboberfläche: http://127.0.0.1:5500
-
-## 🌱 Seed Script
-
-Demo-Daten in die Datenbank schreiben:
+### Container ausführen
 ```
-m uv run social-seed
+docker run --rm -p 8000:8000 simple-social-backend
 ```
-Es werden drei Beispiel-Posts eingefügt.
 
-## 🧪 Tests ausführen
-### Backend
+
+## 🧪 Backend testen
+### ✔ Lokal (ohne Docker)
 ```
+cd backend
 py -m uv run pytest -q
 ```
 
-- Erzeugt temporäre SQLite-Testdatenbank
-
-- Löscht alle Testdaten nach Laufende
-
-- Keine Konflikte mit deiner echten social.db
-
-### Frontend
+### ✔ Im Docker-Image
 ```
+docker run --rm simple-social-backend uv run pytest -q
+```
+
+## 🖥️ Frontend starten
+### ▶️ Ohne Docker
+```
+cd frontend
+python -m http.server 5500
+```
+
+📍 http://localhost:5500
+
+
+
+
+## 🐳 Frontend via Docker
+```
+docker build -t simple-social-frontend -f frontend/Dockerfile .
+docker run --rm -p 5500:80 simple-social-frontend
+```
+
+## 🎭 Frontend E2E Tests
+```
+cd frontend
 npx playwright test
 ```
 
-- Führt alle Playwright tests aus, die im Projekt gefunden werden
 
-- Führt die Tests in einem headless Browser aus
+Ergebnis → `frontend/test-results/`
 
-## 🗂️ Projektstruktur
+🔄 Lokales Docker Compose
+```
+docker compose -f docker-compose.local.yml up --build
+```
+
+Startet:
+| Service  | Port |
+| -------- | ---  |
+| Backend  | 8000 |
+| Frontend | 5500 |
+
+
+
+## 🌱 Seed Script
+
+Testdaten einfügen:
+```
+py -m uv run social-seed
+```
+
+Erzeugt drei Beispiel-Posts.
+
+
+# 📁 Projektstruktur
 ```
 simple_social/
-.
-├── backend
-│   ├── main.py
-│   ├── pyproject.toml
-│   ├── social.db
-│   ├── src
-│   │   └── simple_social_backend
-│   ├── tests
-│   │   └── test_api.py
-│   └── uv.lock
-├── frontend
-│   ├── index.html
-│   ├── node_modules
-│   │   ├── @playwright
-│   │   ├── playwright
-│   │   └── playwright-core
-│   ├── package-lock.json
-│   ├── package.json
-│   ├── test-results
-│   └── tests
-│       └── posts.spec.js
-├── hooks
-│   └── commit-msg
-├── README.md
-└── scripts
-    └── install_hooks.sh
+├── backend/
+│   ├── src/simple_social_backend/
+│   ├── tests/test_api.py
+│   ├── main.py
+│   ├── social.db
+│   ├── pyproject.toml
+│   └── uv.lock
+│
+├── frontend/
+│   ├── index.html
+│   ├── tests/posts.spec.js
+│   ├── package.json
+│   └── node_modules/
+│
+├── .github/workflows/
+│   ├── backend-tests.yml
+│   ├── backend-docker.yml
+│   ├── backend-release.yml
+│   ├── frontend-tests.yml
+│   ├── frontend-docker.yml
+│   ├── frontend-release.yml
+│   ├── validate-branch-issue.yml
+│   └── create-issue-branch.yml
+│
+├── hooks/commit-msg
+├── scripts/install_hooks.sh
+└── README.md
 ```
 
-## 🤖 GitHub Actions
+## 🤖 GitHub Actions – Übersicht
+### 🧪 Backend Tests (no Docker)
 
-Tests werden automatisch ausgeführt, sobald ein Pull Request erstellt wird.
+→ `backend-tests.yml`
+Läuft bei Push + PR auf:
+`feature/*`, `bugfix/*`, `hotfix/*`, `docs/*`, `release/*`, `develop`, `main`
 
-Workflow: ```.github/workflows/tests.yml```
+### 🐳🧪 Backend Tests (Docker)
+→ `backend-docker.yml`
+- Baut Image
+- Führt pytest im Container aus
+- Optional: push von Docker Images
 
-Er macht:
+### 🚀 Backend Release
+→ `backend-release.yml`
+- läuft nur bei Tags:
+  - `vX.Y.Z`
+  - `vX.Y.Z-rcN`
 
-1. Code auschecken
+- pushed nach GHCR:
+  - `simple-social-backend:<tag>`
+  - `:latest` bei final Release
 
-2. Python installieren
 
-3. uv installieren
+### 🎭 Frontend Tests (no Docker)
+→ `frontend-tests.yml`
 
-4. Dependencies synchronisieren
+### 🎭🐳 Frontend Tests (Docker)
+→ `frontend-docker.yml`
 
-5. ```pytest``` ausführen
+### 🚀 Frontend Release
+→ `frontend-release.yml`
 
-## 🧠 Technologien
+Pusht Image nach GHCR.
 
-* FastAPI
+### 🕵️ Branch & Commit Validator
+→ `validate-branch-and-issue.yml`
 
-* SQLModel
+Prüft:
+- Branch Format
+- Commit Message enthält Issue-Nummer
+- Keine Pflicht für Releases
 
-* SQLite
 
-* Pytest
-
-* uv (Package/Env Manager)
-
-* Uvicorn
-
-* GitHub Actions
-
-## 🔧 Nützliche Entwicklertools
-
-Python-Shell im Projektkontext:
+### 🧵 Issue → Branch Automation
+→ `create-issue-branch.yml`
+Erzeugt automatisch:
 ```
-py -m uv run python
+feature/<ISSUE>-kürzer-titel
 ```
 
-Neu synchronisieren (alles neu installieren):
+
+🧭 Branch-Namenskonventionen
+
+|    Typ  |          Muster	             |      Beispiel         |
+| :------ | :--------------------------: | --------------------: |
+| Feature | feature/<ISSUE>-beschreibung | feature/12-login-form |
+| Bugfix  | bugfix/<ISSUE>-beschreibung  | bugfix/7-null-bug     |
+| Hotfix  | hotfix/<ISSUE>-beschreibung  | hotfix/3-prod-crash   |
+| Docs    | docs/<ISSUE>-beschreibung    | docs/5-update-readme  |
+| Release | release/X.Y.Z(-rcN)          | release/3.0.0-rc1     |
+
+❗ Releases dürfen keine Issue-Nummer enthalten.
+
+
+
+## ✍️ Commit-Message-Regeln
+### Auf feature/bugfix/hotfix/docs:
+✔ Erste Zeile MUSS die Issue-Nummer enthalten:
 ```
-py -m uv sync --clean
+Login-Button hinzugefügt (#12)
+```
+### Auf release/X.Y.Z:
+
+✔ Keine Issue-Pflicht:
+```
+Release 3.0.0 vorbereitet
+```
+### 🔧 Git Hooks
+
+Setup:
+```
+./scripts/install_hooks.sh
 ```
 
-# Git Hooks
-
-Dieses Repository verwendet einen Git-Hook, um sicherzustellen, dass Commit-Messages zu Feature-/Bugfix-/Hotfix-/Release-Branches immer die passende Issue-Nummer enthalten.
-
-### Branch-Namenskonvention
-
-Der Hook greift nur auf Branches, die diesem Schema folgen:
-
-- `feature/<ISSUE>-beschreibung`
-- `bugfix/<ISSUE>-beschreibung`
-- `hotfix/<ISSUE>-beschreibung`
-- `release/<ISSUE>-beschreibung`
-
-Beispiele:
-
-- `feature/12-neue-login-maske`
-- `bugfix/34-nullpointer-beim-start`
-- `hotfix/7-falscher-text-im-banner`
-- `release/5-version-1-2-0`
-
-Die Issue-Nummer ist immer die Zahl direkt nach dem `/`, also z. B. `12` in `feature/12-neue-login-maske`.
-
-### Commit-Message-Konvention
-
-Wenn du auf einem dieser Branches committest, **muss** die erste Zeile der Commit-Message die Issue-Nummer in der Form `#<ISSUE>` enthalten.
-
-Beispiel für eine gültige Commit-Message auf Branch `feature/12-neue-login-maske`:
-
-
-## Lokaler pre-push-Hook mit Switch
-
-git config --local hook.tests backend          # nur ohne Docker
-git config --local hook.tests backend-docker   # nur mit Docker
-git config --local hook.tests all              # wie jetzt: beide
-git config --local hook.tests none             # Tests aus (nur im Notfall)
+Konfiguration:
+```
+git config --local hook.tests backend
+git config --local hook.tests backend-docker
+git config --local hook.tests all
+git config --local hook.tests none
+```

@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
+
+# ins Repo-Root wechseln
+REPO_ROOT=$(git rev-parse --show-toplevel)
+cd "$REPO_ROOT"
 
 # Lokale Einstellung lesen, default = all
 SCOPE=$(git config --local hook.tests || echo "all")

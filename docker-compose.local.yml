@@ -1,0 +1,14 @@
+services:
+  backend:
+    image: simple-social-backend:test
+    container_name: simple-social-backend-local
+    ports:
+      - "8000:8000"
+
+  frontend:
+    image: simple-social-frontend:test
+    container_name: simple-social-frontend-local
+    ports:
+      - "5500:80"
+    depends_on:
+      - backend

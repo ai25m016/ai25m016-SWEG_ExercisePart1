@@ -1,4 +1,4 @@
-name: Frontend E2E Tests
+name: Frontend E2E (no Docker)
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
       - 'hotfix/**'
       - 'release/**'
     paths:
-      - 'backend/**'
+      - 'frontend/**'
       - '.github/workflows/frontend-tests.yml'
   pull_request:
     branches: 
@@ -17,6 +17,7 @@ on:
 
 jobs:
   e2e:
+    name: Frontend E2E (no Docker)
     runs-on: ubuntu-latest
 
     defaults:
@@ -49,17 +50,20 @@ jobs:
       - name: Install frontend dependencies & Playwright
         working-directory: frontend
         run: |
-          # If you have a package-lock.json, npm ci will be used.
-          # Otherwise it falls back to npm install.
           npm ci || npm install
           npx playwright install --with-deps
 
       # --- Start backend + frontend and run E2E tests ---
-      - name: Run Playwright E2E tests
+      - name: Run Playwright E2E tests (no Docker)
         env:
           CI: "true"
         run: |
           set -e
+
+          cleanup() {
+            kill "$BACKEND_PID" "$FRONTEND_PID" 2>/dev/null || true
+          }
+          trap cleanup EXIT
 
           # Start backend (FastAPI) on port 8000
           cd backend
@@ -85,7 +89,3 @@ jobs:
 
           # Run Playwright tests (uses your tests in frontend/tests/)
           npx playwright test
-
-          # Stop servers
-          kill $BACKEND_PID $FRONTEND_PID || true
-
