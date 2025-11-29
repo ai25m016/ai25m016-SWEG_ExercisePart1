@@ -16,11 +16,11 @@ jobs:
     steps:
       - name: Show branch info
         run: |
-          echo "Event: $GITHUB_EVENT_NAME"
-          echo "Ref:   $GITHUB_REF"
-          echo "Base:  $GITHUB_BASE_REF"
-          echo "Head:  $GITHUB_HEAD_REF"
-          echo "Ref name: $GITHUB_REF_NAME"
+          echo "Event:       $GITHUB_EVENT_NAME"
+          echo "Ref:         $GITHUB_REF"
+          echo "Base (PR):   $GITHUB_BASE_REF"
+          echo "Head (PR):   $GITHUB_HEAD_REF"
+          echo "Ref name:    $GITHUB_REF_NAME"
 
       - name: Check branch name pattern
         run: |
@@ -33,20 +33,35 @@ jobs:
             exit 0
           fi
 
-          # Erlaubte Branch-Typen: feature/NUM-..., bugfix/NUM-..., hotfix/NUM-..., release/NUM-..., docs/NUM-...
-          if echo "$BRANCH" | grep -Eq '^(feature|bugfix|hotfix|release|docs)/[0-9]+-'; then
-            echo "✅ Branch name is valid."
-          else
-            echo "❌ Invalid branch name: $BRANCH"
-            echo "   Expected something like:"
-            echo "     feature/2-something"
-            echo "     bugfix/3-other"
-            echo "     hotfix/10-..."
-            echo "     release/1-0-0-..."
-            echo "     docs/1-something"
-            echo "     develop"
-            exit 1
+          # Release-Branches NUR als:
+          #   release/X.Y.Z
+          #   release/X.Y.Z-rcN
+          if echo "$BRANCH" | grep -Eq '^release/[0-9]+\.[0-9]+\.[0-9]+(-rc[0-9]+)?$'; then
+            echo "✅ Release branch with semantic version: $BRANCH"
+            exit 0
           fi
+
+          # Erlaubte Branch-Typen mit Issue-Nummer:
+          #   feature/NUM-...
+          #   bugfix/NUM-...
+          #   hotfix/NUM-...
+          #   docs/NUM-...
+          if echo "$BRANCH" | grep -Eq '^(feature|bugfix|hotfix|docs)/[0-9]+-'; then
+            echo "✅ Branch name with issue number is valid."
+            exit 0
+          fi
+
+          echo "❌ Invalid branch name: $BRANCH"
+          echo "   Expected one of:"
+          echo "     main"
+          echo "     develop"
+          echo "     release/X.Y.Z (z.B. release/3.0.0)"
+          echo "     release/X.Y.Z-rcN (z.B. release/3.0.0-rc1)"
+          echo "     feature/<nummer>-beschreibung  (z.B. feature/12-login-page)"
+          echo "     bugfix/<nummer>-beschreibung   (z.B. bugfix/7-fix-crash)"
+          echo "     hotfix/<nummer>-beschreibung   (z.B. hotfix/3-prod-bug)"
+          echo "     docs/<nummer>-beschreibung     (z.B. docs/5-update-readme)"
+          exit 1
 
       - uses: actions/checkout@v4
 
@@ -57,9 +72,15 @@ jobs:
           BRANCH="${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
           echo "Current branch: $BRANCH"
 
-          # Für main/develop (oder andere Sonder-Branches) optional früh rausgehen
+          # Für main/develop keine Issue-Pflicht
           if [ "$BRANCH" = "main" ] || [ "$BRANCH" = "develop" ]; then
             echo "ℹ️ Branch '$BRANCH' has no issue number convention. Skipping commit message check."
+            exit 0
+          fi
+
+          # Für Release-Branches (release/X.Y.Z oder release/X.Y.Z-rcN) ebenfalls keine Issue-Pflicht
+          if echo "$BRANCH" | grep -Eq '^release/[0-9]+\.[0-9]+\.[0-9]+(-rc[0-9]+)?$'; then
+            echo "ℹ️ Release branch '$BRANCH' has no commit issue requirement. Skipping commit message check."
             exit 0
           fi
 

@@ -6,9 +6,26 @@ MSG="$(head -n 1 "$MSG_FILE")"
 BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 
 case "$BRANCH" in
-  feature/*|bugfix/*|hotfix/*|release/*|docs/*)
+  release/*)
+    # ERLAUBT:
+    #   release/X.Y.Z
+    #   release/X.Y.Z-rcN
+    if echo "$BRANCH" | grep -Eq '^release/[0-9]+\.[0-9]+\.[0-9]+(-rc[0-9]+)?$'; then
+      # keine Issue-Pflicht auf Versions-Branches
+      exit 0
+    else
+      echo "❌ Commit abgebrochen."
+      echo "    Release-Branch muss so aussehen:"
+      echo "      - release/X.Y.Z"
+      echo "      - release/X.Y.Z-rcN"
+      echo "    Beispiel: release/3.0.0 oder release/3.0.0-rc1"
+      exit 1
+    fi
+    ;;
+
+  feature/*|bugfix/*|hotfix/*|docs/*)
     # Branch-Schema: typ/<nummer>-beschreibung
-    if echo "$BRANCH" | grep -Eq '^(feature|bugfix|hotfix|release|docs)/[0-9]+-'; then
+    if echo "$BRANCH" | grep -Eq '^(feature|bugfix|hotfix|docs)/[0-9]+-'; then
       ISSUE_NUM="$(echo "$BRANCH" | sed -E 's@^[^/]+/([0-9]+)-.*@\1@')"
 
       # Prüfen, ob in der ERSTEN ZEILE "#<ISSUE_NUM>" vorkommt
@@ -22,10 +39,14 @@ case "$BRANCH" in
     else
       echo "❌ Commit abgebrochen."
       echo "    Branch-Name entspricht nicht dem Schema:"
-      echo "    Erwarte z.B.: feature/2-beschreibung oder hotfix/5-irgendwas"
+      echo "    Erwarte z.B.:"
+      echo "      feature/2-beschreibung"
+      echo "      bugfix/5-irgendwas"
+      echo "      docs/7-doku-anpassen"
       exit 1
     fi
     ;;
+
   *)
     # alle anderen Branches sperren
     echo "❌ Commit abgebrochen."
@@ -34,8 +55,9 @@ case "$BRANCH" in
     echo "      - feature/<nummer>-beschreibung"
     echo "      - bugfix/<nummer>-beschreibung"
     echo "      - hotfix/<nummer>-beschreibung"
-    echo "      - release/<nummer>-beschreibung"
     echo "      - docs/<nummer>-beschreibung"
+    echo "      - release/X.Y.Z"
+    echo "      - release/X.Y.Z-rcN"
     exit 1
     ;;
 esac

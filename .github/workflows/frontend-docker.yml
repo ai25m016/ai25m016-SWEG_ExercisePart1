@@ -1,10 +1,8 @@
-name: Build & Test & Push frontend Docker image
+name: Frontend E2E (Docker image)
 
 on:
   push:
     branches:
-      - main
-      - develop
       - 'feature/**'
       - 'bugfix/**'
       - 'hotfix/**'
@@ -20,6 +18,7 @@ on:
 jobs:
   # 1) Build frontend image and run Playwright tests against it
   test-in-docker:
+    name: Frontend E2E (Docker)
     runs-on: ubuntu-latest
 
     steps:
@@ -103,7 +102,7 @@ jobs:
           npm ci || npm install
           npx playwright install --with-deps
 
-      - name: Run Playwright tests against Dockerized frontend
+      - name: Run Playwright E2E tests (Docker)
         working-directory: frontend
         env:
           CI: "true"
@@ -119,14 +118,17 @@ jobs:
 
       - name: Stop backend server
         if: always()
+        working-directory: backend
         run: |
           if [ -f backend.pid ]; then
             kill "$(cat backend.pid)" || true
           fi
         shell: bash
 
+
   # 2) Build & push image to GHCR – ONLY on push to main after tests passed
   build-and-push:
+    name: Build & Push frontend Docker image
     runs-on: ubuntu-latest
     needs: test-in-docker
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -158,4 +160,3 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/simple-social-frontend:latest
             ghcr.io/${{ github.repository_owner }}/simple-social-frontend:${{ github.sha }}
-

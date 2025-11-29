@@ -1,10 +1,8 @@
-name: Build & Test & Push backend Docker image
+name: Backend Tests (Docker image)
 
 on:
   push:
     branches:
-      - main
-      - develop
       - 'feature/**'
       - 'bugfix/**'
       - 'hotfix/**'
@@ -20,6 +18,7 @@ on:
 jobs:
   # 1) Tests im Docker-Image – läuft für alle oben definierten Events
   test-in-docker:
+    name: Backend Tests (Docker)
     runs-on: ubuntu-latest
 
     steps:
@@ -34,18 +33,19 @@ jobs:
         with:
           context: .
           file: backend/Dockerfile
-          load: true                    # Image nur im Runner laden, NICHT pushen
+          load: true
           tags: simple-social-backend:test
 
-      - name: Run tests inside container
+      - name: Run backend tests inside container
         run: |
           docker run --rm simple-social-backend:test \
             uv run pytest -q
 
   # 2) Image bauen & nach GHCR pushen – NUR bei Push auf main
   build-and-push:
+    name: Build & Push backend Docker image
     runs-on: ubuntu-latest
-    needs: test-in-docker               # <-- erst Tests, dann Build
+    needs: test-in-docker
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     permissions:
