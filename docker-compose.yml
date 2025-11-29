@@ -1,0 +1,14 @@
+services:
+  backend:
+    image: ghcr.io/DEIN_USER/simple-social-backend:latest
+    container_name: simple-social-backend
+    ports:
+      - "8000:8000"
+
+  frontend:
+    image: ghcr.io/DEIN_USER/simple-social-frontend:latest
+    container_name: simple-social-frontend
+    ports:
+      - "5500:80"
+    depends_on:
+      - backend
