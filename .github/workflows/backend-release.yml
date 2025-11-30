@@ -36,5 +36,4 @@ jobs:
           push: true
           tags: |
             ghcr.io/${{ github.repository_owner }}/simple-social-backend:${{ github.ref_name }}
-            # Optional: bei finalen Tags auch "latest"
-            ${{ startsWith(github.ref_name, 'v') && !contains(github.ref_name, '-rc') && format('ghcr.io/{0}/simple-social-backend:latest', github.repository_owner) || '' }}
+            ${{ !contains(github.ref_name, '-rc') && format('ghcr.io/{0}/simple-social-backend:latest', github.repository_owner) || '' }}
