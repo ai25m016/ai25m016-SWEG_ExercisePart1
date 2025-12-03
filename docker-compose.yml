@@ -1,14 +1,27 @@
 services:
   backend:
-    image: ghcr.io/ai25m016/simple-social-backend:latest
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: ghcr.io/ai25m016/simple-social-backend:${BACKEND_TAG:-latest}
     container_name: simple-social-backend
+    restart: always
     ports:
       - "8000:8000"
+    volumes:
+      - backend_local_data:/app
 
   frontend:
-    image: ghcr.io/ai25m016/simple-social-frontend:latest
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: ghcr.io/ai25m016/simple-social-frontend:${FRONTEND_TAG:-latest}
     container_name: simple-social-frontend
-    ports:
-      - "5500:80"
+    restart: always
     depends_on:
       - backend
+    ports:
+      - "5500:80"
+
+volumes:
+  backend_local_data:
