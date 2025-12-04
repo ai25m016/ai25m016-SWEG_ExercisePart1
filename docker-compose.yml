@@ -9,7 +9,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - backend_local_data:/app
+      - backend_data:/app
 
   frontend:
     build:
@@ -24,4 +24,4 @@ services:
       - "5500:80"
 
 volumes:
-  backend_local_data:
+  backend_data:
