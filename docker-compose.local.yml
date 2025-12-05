@@ -1,14 +1,27 @@
 services:
   backend:
-    image: simple-social-backend:test
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: simple-social-backend
     container_name: simple-social-backend-local
+    restart: always
     ports:
       - "8000:8000"
+    volumes:
+      - backend_data_local:/app
 
   frontend:
-    image: simple-social-frontend:test
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: simple-social-frontend
     container_name: simple-social-frontend-local
-    ports:
-      - "5500:80"
+    restart: always
     depends_on:
       - backend
+    ports:
+      - "5500:80"
+
+volumes:
+  backend_data_local:

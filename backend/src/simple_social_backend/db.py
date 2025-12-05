@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+import os
 from typing import Optional
 from pathlib import Path
 from datetime import datetime
@@ -6,11 +9,35 @@ from sqlmodel import SQLModel, create_engine, Session, select
 
 from .models import Post
 
+# Lokale SQLite-DB als Fallback
 DB_PATH = Path(__file__).resolve().parent.parent.parent / "social.db"
 
 
+def _create_engine():
+    database_url = os.getenv("DATABASE_URL")
+
+    if database_url:
+        # z.B. Docker / echte DB
+        return create_engine(
+            database_url,
+            echo=False,
+            pool_pre_ping=True,
+        )
+
+    # Lokaler Fallback (nur außerhalb von Docker sinnvoll)
+    return create_engine(
+        f"sqlite:///{DB_PATH}",
+        echo=False,
+        connect_args={"check_same_thread": False},
+    )
+
+
+# Ein globales Engine-Objekt wiederverwenden
+ENGINE = _create_engine()
+
+
 def get_engine():
-    return create_engine(f"sqlite:///{DB_PATH}", echo=False)
+    return ENGINE
 
 
 def init_db():
