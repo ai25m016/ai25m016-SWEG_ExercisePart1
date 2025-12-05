@@ -105,6 +105,12 @@ python -m http.server 5500
 📍 http://localhost:5500
 
 
+## 🧪 Backend testen
+### ✔ Lokal (ohne Docker)
+```
+cd backend
+py -m uv run pytest -q
+```
 
 
 ## 🐳 Frontend via Docker
@@ -317,6 +323,7 @@ Setup:
 ```
 ./scripts/install_hooks.sh
 ```
+### 🔧 Git Hooks
 
 Konfiguration:
 ```
