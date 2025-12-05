@@ -1,0 +1,84 @@
+name: Frontend E2E (Docker Compose + Postgres)
+
+on:
+  push:
+    branches:
+      - 'feature/**'
+      - 'bugfix/**'
+      - 'hotfix/**'
+      - 'release/**'
+    paths:
+      - 'frontend/**'
+      - 'backend/**'
+      - 'docker-compose.orch.yml'
+      - '.github/workflows/frontend-orch.yml'
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  e2e-orch:
+    name: Frontend E2E (Compose + Postgres)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Start full stack via docker-compose.orch.yml
+        run: |
+          docker compose -f docker-compose.orch.yml up -d --build
+
+      - name: Wait for backend to be ready
+        run: |
+          for i in {1..40}; do
+            if curl -sSf http://127.0.0.1:8000/docs > /dev/null; then
+              echo "Backend is up!"
+              exit 0
+            fi
+            echo "Waiting for backend..."
+            sleep 2
+          done
+          echo "Backend did not start in time"
+          exit 1
+
+      - name: Wait for frontend to be ready
+        run: |
+          for i in {1..40}; do
+            if curl -sSf http://127.0.0.1:5500 > /dev/null; then
+              echo "Frontend is up!"
+              exit 0
+            fi
+            echo "Waiting for frontend..."
+            sleep 2
+          done
+          echo "Frontend did not start in time"
+          exit 1
+
+      # --- Playwright Setup ---
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install frontend dependencies & Playwright
+        working-directory: frontend
+        run: |
+          npm ci || npm install
+          npx playwright install --with-deps
+
+      - name: Run Playwright E2E tests against Docker stack
+        working-directory: frontend
+        env:
+          CI: "true"
+        run: |
+          npx playwright test
+
+      - name: Tear down docker-compose.orch stack
+        if: always()
+        run: |
+          docker compose -f docker-compose.orch.yml down -v

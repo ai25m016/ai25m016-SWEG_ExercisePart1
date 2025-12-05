@@ -14,28 +14,22 @@ DB_PATH = Path(__file__).resolve().parent.parent.parent / "social.db"
 
 
 def _create_engine():
-    """
-    Wählt die Datenbank abhängig von der Umgebung:
-
-    - Wenn DATABASE_URL gesetzt ist → z.B. Postgres im Docker-Compose
-    - Sonst → lokale SQLite-Datei (social.db)
-    """
     database_url = os.getenv("DATABASE_URL")
 
     if database_url:
-        # Beispiel: postgresql+psycopg2://user:pass@db:5432/social
+        # z.B. Docker / echte DB
         return create_engine(
             database_url,
             echo=False,
             pool_pre_ping=True,
         )
-    else:
-        # Lokaler Dev-Fallback: SQLite
-        return create_engine(
-            f"sqlite:///{DB_PATH}",
-            echo=False,
-            connect_args={"check_same_thread": False},
-        )
+
+    # Lokaler Fallback (nur außerhalb von Docker sinnvoll)
+    return create_engine(
+        f"sqlite:///{DB_PATH}",
+        echo=False,
+        connect_args={"check_same_thread": False},
+    )
 
 
 # Ein globales Engine-Objekt wiederverwenden

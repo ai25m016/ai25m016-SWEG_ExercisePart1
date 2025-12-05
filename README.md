@@ -1,6 +1,8 @@
+# 🌐 Simple Social – Fullstack Demo
 
-# 🌐 Simple Social – Fullstack Demo (FastAPI + Frontend + Docker + Playwright + GitHub Actions)
-✨ Ein modernes Fullstack-Projekt mit REST API, Frontend, automatischen Tests, Docker und vollständig automatisierten CI/CD-Pipelines.
+FastAPI + Frontend + Docker + Playwright + GitHub Actions + Orchestrierung
+
+Ein modernes Fullstack-Projekt zur Demonstration von REST-API-Entwicklung, Containerisierung, automatisierten Tests, Multi-Service-Orchestrierung und CI/CD-Pipelines.
 
 ## 🚀 Features
 
@@ -19,13 +21,14 @@
 - Backend Tests (pytest)
 - Frontend E2E Tests (Playwright)
 - Docker-basierte Test-Pipelines
-- Required checks für PRs
+- Server-Orchestration Tests (Backend + Frontend + DB)
 
-### 🐳 Docker
+🐳 Docker & Orchestrierung
 - Backend-Image
 - Frontend-Image
-- Lokales Compose-Setup
-- Release-Tags: vX.Y.Z, vX.Y.Z-rcN
+- Lokale Entwicklung (Backend + Frontend)
+- Vollständige Orchestrierung (Backend + Frontend + Postgres)
+- Persistente Volumes
 
 ### ⚙️ GitHub Actions
 - 8 vollständige CI/CD Workflows:
@@ -39,16 +42,17 @@
   - Issue → Branch Automation
 
 ### 🔐 Git Hooks
-- Commit-Message Validator
-- Branch-Namen Validator
+- Commit Message Validator
+- Branch Name Validator
+- Integration mit Test-Skripten
 
 ## 🛠️ Installation
-### 🔧 Backend Dependencies installieren
+### 🔧 Backend installieren
 ```
 py -m uv sync
 ```
 
-### 🎭 Frontend Dependencies installieren
+### 🎭 Frontend installieren
 ```
 cd frontend
 npm install
@@ -118,7 +122,7 @@ npx playwright test
 
 Ergebnis → `frontend/test-results/`
 
-🔄 Lokales Docker Compose
+## 🔄 Lokales Docker Compose
 ```
 docker compose -f docker-compose.local.yml up --build
 ```
@@ -130,6 +134,55 @@ Startet:
 | Frontend | 5500 |
 
 
+## 🐳 Full Orchestration (Backend + Frontend + Postgres)
+
+Dies ist das vollständige Multi-Service-Setup.
+
+Starten:
+```
+docker compose -f docker-compose.orch.yml up -d --build
+```
+
+Stoppen:
+```
+docker compose -f docker-compose.orch.yml down -v
+```
+
+Services:
+| Service  | Port | Beschreibung          |
+| -------- | ---- | --------------------- |
+| Backend  | 8000 | FastAPI               |
+| Frontend | 5500 | Nginx Static Frontend |
+| Postgres | 5432 | Persistente Datenbank (`social_db_data`)|
+
+## 🧪 Orchestrierte Tests (Backend + Frontend + DB)
+
+Alle Testskripte befinden sich unter `scripts/run_tests.sh`.
+
+### Backend in Orchestrierung testen
+```
+./scripts/run_tests.sh backend-orch
+```
+
+### Frontend in Orchestrierung testen
+```
+./scripts/run_tests.sh frontend-orch
+```
+
+### Alle Tests (lokal, Docker, Orchestrierung)
+```
+./scripts/run_tests.sh all
+```
+
+Dies führt in Reihenfolge aus:
+1. Backend lokal
+2. Frontend lokal
+3. Backend im Docker-Image
+4. Frontend im Docker-Image
+5. Backend orchestration
+6. Frontend orchestration
+
+Damit wird garantiert, dass das System **immer** konsistent funktioniert.
 
 ## 🌱 Seed Script
 
@@ -162,14 +215,21 @@ simple_social/
 │   ├── backend-tests.yml
 │   ├── backend-docker.yml
 │   ├── backend-release.yml
+│   ├── backend-orch.yml
 │   ├── frontend-tests.yml
 │   ├── frontend-docker.yml
 │   ├── frontend-release.yml
+│   ├── frontend-orch.yml
 │   ├── validate-branch-issue.yml
 │   └── create-issue-branch.yml
 │
 ├── hooks/commit-msg
 ├── scripts/install_hooks.sh
+├── .env
+├── docker-compose.local.yml
+├── docker-compose.orch.local.yml
+├── docker-compose.orch.yml
+├── docker-compose.yml
 └── README.md
 ```
 
@@ -262,6 +322,10 @@ Konfiguration:
 ```
 git config --local hook.tests backend
 git config --local hook.tests backend-docker
+git config --local hook.tests backend-orch
+git config --local hook.tests frontend
+git config --local hook.tests frontend-docker
+git config --local hook.tests frontend-orch
 git config --local hook.tests all
 git config --local hook.tests none
 ```

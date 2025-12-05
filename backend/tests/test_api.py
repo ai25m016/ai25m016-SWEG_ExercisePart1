@@ -3,7 +3,7 @@ import importlib
 import sqlite3
 
 from fastapi.testclient import TestClient
-
+from sqlmodel import create_engine
 from simple_social_backend.api import app
 
 
@@ -15,14 +15,21 @@ def setup_module(_):
     db = importlib.import_module("simple_social_backend.db")
     test_db = Path(__file__).parent / "test_social.db"
 
-    # DB_PATH im Modul simple_social_backend.db auf die Test-DB umbiegen
+    # 1) DB_PATH im Modul simple_social_backend.db auf die Test-DB umbiegen
     db.DB_PATH = test_db
 
-    # Alte Test-DB wegwerfen, falls vorhanden
+    # 2) Alte Test-DB wegwerfen, falls vorhanden
     if test_db.exists():
         test_db.unlink()
 
-    # Tabellen neu anlegen
+    # 3) Engine neu erstellen, damit sie auf test_social.db zeigt
+    db.ENGINE = create_engine(
+        f"sqlite:///{db.DB_PATH}",
+        echo=False,
+        connect_args={"check_same_thread": False},
+    )
+
+    # 4) Tabellen neu anlegen
     db.init_db()
 
 
@@ -53,7 +60,11 @@ def _clear_db():
     Hilfsfunktion: löscht alle Zeilen aus der Post-Tabelle.
     So startet jeder Test mit einem definierten Zustand.
     """
-    db = importlib.import_module("simple_social_backend.db")
+    import simple_social_backend.db as db
+
+    # Stelle sicher, dass die Tabellen existieren
+    db.init_db()
+
     conn = sqlite3.connect(db.DB_PATH)
     try:
         conn.execute("DELETE FROM post")
