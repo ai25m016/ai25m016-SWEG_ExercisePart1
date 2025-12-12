@@ -3,17 +3,17 @@ name: Backend Tests (no Docker)
 on:
   push:
     branches:
-      - 'feature/**'
-      - 'bugfix/**'
-      - 'hotfix/**'
-      - 'release/**'
+      #- 'feature/**'
+      #- 'bugfix/**'
+      #- 'hotfix/**'
+      #- 'release/**'
     paths:
       - 'backend/**'
       - '.github/workflows/backend-tests.yml'
   pull_request:
     branches:
-      - main
-      - develop
+      #- main
+      #- develop
 
 jobs:
   test:

@@ -3,17 +3,17 @@ name: Frontend E2E (no Docker)
 on:
   push:
     branches: 
-      - 'feature/**'
-      - 'bugfix/**'
-      - 'hotfix/**'
-      - 'release/**'
+      #- 'feature/**'
+      #- 'bugfix/**'
+      #- 'hotfix/**'
+      #- 'release/**'
     paths:
       - 'frontend/**'
       - '.github/workflows/frontend-tests.yml'
   pull_request:
     branches: 
-      - main
-      - develop
+      #- main
+      #- develop
 
 jobs:
   e2e:

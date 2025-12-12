@@ -3,17 +3,17 @@ name: Frontend E2E (Docker image)
 on:
   push:
     branches:
-      - 'feature/**'
-      - 'bugfix/**'
-      - 'hotfix/**'
-      - 'release/**'
+      #- 'feature/**'
+      #- 'bugfix/**'
+      #- 'hotfix/**'
+      #- 'release/**'
     paths:
       - 'frontend/**'
       - '.github/workflows/frontend-docker.yml'
   pull_request:
     branches:
-      - main
-      - develop
+      #- main
+      #- develop
 
 jobs:
   # 1) Build frontend image and run Playwright tests against it

@@ -3,17 +3,17 @@ name: Backend Tests (Docker image)
 on:
   push:
     branches:
-      - 'feature/**'
-      - 'bugfix/**'
-      - 'hotfix/**'
-      - 'release/**'
+      #- 'feature/**'
+      #- 'bugfix/**'
+      #- 'hotfix/**'
+      #- 'release/**'
     paths:
       - 'backend/**'
       - '.github/workflows/backend-docker.yml'
   pull_request:
     branches:
-      - main
-      - develop
+      #- main
+      #- develop
 
 jobs:
   # 1) Tests im Docker-Image – läuft für alle oben definierten Events

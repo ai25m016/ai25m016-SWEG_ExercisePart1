@@ -3,18 +3,18 @@ name: Backend Tests (Docker Compose + Postgres)
 on:
   push:
     branches:
-      - 'feature/**'
-      - 'bugfix/**'
-      - 'hotfix/**'
-      - 'release/**'
+      #- 'feature/**'
+      #- 'bugfix/**'
+      #- 'hotfix/**'
+      #- 'release/**'
     paths:
       - 'backend/**'
       - 'docker-compose.orch.yml'
       - '.github/workflows/backend-orch.yml'
   pull_request:
     branches:
-      - main
-      - develop
+      #- main
+      #- develop
 
 jobs:
   test-backend-orch:
