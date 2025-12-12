@@ -47,11 +47,18 @@ def init_db():
 def add_post(image: str, text: str, user: str) -> int:
     """Neuen Post anlegen und die ID zurückgeben."""
     with Session(get_engine()) as session:
-        post = Post(image=image, text=text, user=user, created_at=datetime.now())
+        post = Post(
+            image=image,
+            image_small=None,
+            text=text,
+            user=user,
+            created_at=datetime.now(),
+        )
         session.add(post)
         session.commit()
         session.refresh(post)
         return post.id
+
 
 
 def get_latest_post() -> dict | None:
@@ -109,3 +116,19 @@ def delete_post(post_id: int) -> bool:
         session.delete(post)
         session.commit()
         return True
+
+def set_post_thumbnail(post_id: int, image_small: str) -> dict | None:
+    """
+    Setzt das verkleinerte Bild für einen Post.
+    Wird vom Image-Resizer-Service aufgerufen.
+    """
+    with Session(get_engine()) as session:
+        post = session.get(Post, post_id)
+        if post is None:
+            return None
+
+        post.image_small = image_small
+        session.add(post)
+        session.commit()
+        session.refresh(post)
+        return post.model_dump()
