@@ -9,6 +9,10 @@ dependencies = [
     "sqlmodel>=0.0.27",
     "uvicorn>=0.38.0",
     "psycopg[binary]",
+    "pika>=1.3.2",
+    "python-multipart>=0.0.9",
+    "python-dotenv",
+    "pytest",
 ]
 
 [dependency-groups]
@@ -21,6 +25,7 @@ dev = [
 [project.scripts]
 social-seed = "simple_social_backend.cli:seed"
 social-api  = "simple_social_backend.cli:start_api"
+resizer-smoke = "simple_social_backend.smoke_resizer:main"
 
 [tool.uv]
 package = true

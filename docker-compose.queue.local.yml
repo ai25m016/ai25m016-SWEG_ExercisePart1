@@ -1,0 +1,82 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: simple-social-db-orch-local
+    restart: always
+    environment:
+      POSTGRES_DB: ${DB_NAME}_LOCAL
+      POSTGRES_USER: ${DB_USER}_LOCAL
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - social_db_data_local:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: simple-social-backend
+    container_name: simple-social-backend-orch-local
+    restart: always
+    depends_on:
+      - db
+      - rabbitmq          # Backend braucht RabbitMQ für Events
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL_LOCAL}
+      RABBITMQ_HOST: rabbitmq          # Name des Services unten
+      IMAGE_RESIZE_QUEUE: image_resize # passt zu deinem events.py
+      # DISABLE_QUEUE: "false"        # optional explizit
+    ports:
+      - "8000:8000"
+    volumes:
+      # gemeinsames Volume für Bilder (FastAPI speichert unter /app/images)
+      - images_data:/app/backend/images
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: simple-social-frontend
+    container_name: simple-social-frontend-orch
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "5500:80"
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: simple-social-rabbitmq
+    restart: always
+    ports:
+      - "5672:5672"   # AMQP (für pika)
+      - "15672:15672" # Web-UI zum Debuggen (http://localhost:15672)
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+
+  image-resizer:
+    build:
+      context: ./image_resizer    # <--- hier kommt euer Resizer-Code hin
+      dockerfile: Dockerfile
+    image: simple-social-image-resizer
+    container_name: simple-social-image-resizer
+    restart: always
+    depends_on:
+      - rabbitmq
+      - backend
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      IMAGE_RESIZE_QUEUE: image_resize
+      BACKEND_BASE_URL: http://backend:8000
+      IMAGES_DIR: /app/backend/images
+    volumes:
+      # selbes Volume wie Backend → beide sehen die gleichen Bilddateien
+      - images_data:/app/backend/images
+
+volumes:
+  social_db_data_local:
+  images_data:

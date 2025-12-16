@@ -1,9 +1,15 @@
-from .db import init_db, add_post
 import os
 from pathlib import Path
+
+from dotenv import load_dotenv, find_dotenv
 import uvicorn
 
+# .env aus Repo-Root automatisch laden (ohne --env-file / manuelle $env:...)
+load_dotenv(find_dotenv())
+
 def seed():
+    # Import erst nach load_dotenv, damit DB/Queue-Konfig aus .env sicher greift
+    from .db import init_db, add_post
     init_db()
     add_post("images/cat.png",  "Süße Katze!",            "alice")
     add_post("images/lake.jpg", "Spaziergang am See.",    "bob")
