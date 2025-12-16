@@ -1,0 +1,143 @@
+import os
+import sys
+import time
+import socket
+import subprocess
+from pathlib import Path
+
+import pytest
+import requests
+
+
+def _wait_http(url: str, timeout_s: int = 30):
+    end = time.time() + timeout_s
+    last = None
+    while time.time() < end:
+        try:
+            r = requests.get(url, timeout=2)
+            if r.status_code < 500:
+                return
+            last = f"{r.status_code} {r.text[:200]}"
+        except Exception as e:
+            last = repr(e)
+        time.sleep(0.5)
+    raise RuntimeError(f"Service not ready: {url} (last={last})")
+
+
+def _port_open(host: str, port: int) -> bool:
+    try:
+        with socket.create_connection((host, port), timeout=0.5):
+            return True
+    except OSError:
+        return False
+
+
+@pytest.fixture(scope="session")
+def rabbitmq():
+    """
+    Reuse local RabbitMQ if something already listens on 127.0.0.1:5672,
+    otherwise start docker container on that port.
+    """
+    host, port = "127.0.0.1", 5672
+    if _port_open(host, port):
+        yield {"host": host, "port": port}
+        return
+
+    # start container
+    name = "rabbitmq-e2e"
+    subprocess.run(["docker", "rm", "-f", name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    subprocess.check_call([
+        "docker", "run", "-d", "--rm",
+        "--name", name,
+        "-p", "5672:5672",
+        "-p", "15672:15672",
+        "rabbitmq:3-management"
+    ])
+
+    try:
+        # wait until port open
+        end = time.time() + 30
+        while time.time() < end and not _port_open(host, port):
+            time.sleep(0.5)
+        if not _port_open(host, port):
+            raise RuntimeError("RabbitMQ did not start on 5672")
+        yield {"host": host, "port": port}
+    finally:
+        subprocess.run(["docker", "rm", "-f", name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+@pytest.fixture
+def backend_server(tmp_path, rabbitmq):
+    """
+    Starts backend on 127.0.0.1:8001 with isolated IMAGES_DIR in tmp.
+    """
+    repo_root = Path(__file__).resolve().parents[2]
+    backend_dir = repo_root / "backend"
+
+    images_dir = tmp_path / "images"
+    (images_dir / "original").mkdir(parents=True, exist_ok=True)
+    (images_dir / "thumbs").mkdir(parents=True, exist_ok=True)
+
+    env = os.environ.copy()
+    env["RABBITMQ_HOST"] = rabbitmq["host"]
+    env["IMAGE_RESIZE_QUEUE"] = env.get("IMAGE_RESIZE_QUEUE", "image_resize")
+    env["BACKEND_BASE_URL"] = "http://127.0.0.1:8001"
+
+    # IMPORTANT: your backend expects IMAGES_DIR relative to cwd ("images") OR absolute.
+    # We run with cwd=backend/ and point IMAGES_DIR to that temp dir.
+    env["IMAGES_DIR"] = str(images_dir)
+
+    # start backend (no uv, just your venv python)
+    cmd = [sys.executable, "-m", "uvicorn", "simple_social_backend.api:app", "--host", "127.0.0.1", "--port", "8001"]
+    p = subprocess.Popen(cmd, cwd=str(backend_dir), env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+
+    try:
+        _wait_http("http://127.0.0.1:8001/posts", timeout_s=30)
+        yield {"base": "http://127.0.0.1:8001", "images_dir": str(images_dir), "proc": p}
+    finally:
+        p.terminate()
+        try:
+            p.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            p.kill()
+
+
+@pytest.fixture
+def resizer_process(backend_server, rabbitmq):
+    """
+    Starts the resizer worker as a subprocess.
+    If it exits immediately -> fail with its logs.
+    """
+    repo_root = Path(__file__).resolve().parents[2]
+
+    env = os.environ.copy()
+    env["RABBITMQ_HOST"] = rabbitmq["host"]
+    env["IMAGE_RESIZE_QUEUE"] = env.get("IMAGE_RESIZE_QUEUE", "image_resize")
+    env["BACKEND_BASE_URL"] = backend_server["base"]
+    env["IMAGES_DIR"] = backend_server["images_dir"]  # MUST match backend
+    env["PYTHONUNBUFFERED"] = "1"
+
+    # default: use console-script
+    # (if your entrypoint differs, change this one line)
+    cmd = ["social-resizer"]
+
+    p = subprocess.Popen(cmd, cwd=str(repo_root), env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+
+    # give it a moment; if it dies -> show output and fail
+    time.sleep(1.0)
+    if p.poll() is not None:
+        out = ""
+        try:
+            out = p.stdout.read() if p.stdout else ""
+        except Exception:
+            pass
+        raise RuntimeError(f"Resizer exited immediately.\n--- output ---\n{out}\n--------------")
+
+    try:
+        yield p
+    finally:
+        p.terminate()
+        try:
+            p.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            p.kill()

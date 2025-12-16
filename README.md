@@ -59,10 +59,26 @@ npm install
 npx playwright install
 ```
 
-## 🧩 Backend starten
-### ▶️ Ohne Docker
+## 🧩 Lokaler Betrieb
+### 🧩 RabbitMQ starten (Docker)
+```
+docker run --rm -it --name rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:3-management
+```
+#### 📍 Web UI: 
+- http://localhost:15672 (guest/guest)
+
+### 🧩 Image-Resizer starten (lokal per Python)
+```
+.\.venv\Scripts\activate
+social-resizer
+```
+
+
+### 🧩 Backend starten
 ```
 cd backend
+$env:RABBITMQ_HOST="127.0.0.1"
+$env:IMAGE_RESIZE_QUEUE="image_resize"
 py -m uv run social-api
 ```
 
@@ -71,52 +87,11 @@ py -m uv run social-api
 - http://localhost:8000/docs
 - http://localhost:8000/redoc
 
-## 🐳 Backend in Docker starten
-### Image bauen
-```
-docker build -t simple-social-backend -f backend/Dockerfile .
-```
-
-### Container ausführen
-```
-docker run --rm -p 8000:8000 simple-social-backend
-```
-
 
 ## 🧪 Backend testen
-### ✔ Lokal (ohne Docker)
 ```
 cd backend
 py -m uv run pytest -q
-```
-
-### ✔ Im Docker-Image
-```
-docker run --rm simple-social-backend uv run pytest -q
-```
-
-## 🖥️ Frontend starten
-### ▶️ Ohne Docker
-```
-cd frontend
-python -m http.server 5500
-```
-
-📍 http://localhost:5500
-
-
-## 🧪 Backend testen
-### ✔ Lokal (ohne Docker)
-```
-cd backend
-py -m uv run pytest -q
-```
-
-
-## 🐳 Frontend via Docker
-```
-docker build -t simple-social-frontend -f frontend/Dockerfile .
-docker run --rm -p 5500:80 simple-social-frontend
 ```
 
 ## 🎭 Frontend E2E Tests
@@ -126,12 +101,27 @@ npx playwright test
 ```
 
 
-Ergebnis → `frontend/test-results/`
+## 🐳 Betrieb mit Docker
 
-## 🔄 Lokales Docker Compose
+
+### 🐳 Docker Compose lokales Image
+
+### 🐳 Docker Compose Github Image
+
+
+
+### 🧪 Backend testen
 ```
-docker compose -f docker-compose.local.yml up --build
+cd backend
+py -m uv run pytest -q
 ```
+
+### 🎭 Frontend E2E Tests
+```
+cd frontend
+npx playwright test
+```
+
 
 Startet:
 | Service  | Port |
@@ -140,19 +130,10 @@ Startet:
 | Frontend | 5500 |
 
 
-## 🐳 Full Orchestration (Backend + Frontend + Postgres)
 
-Dies ist das vollständige Multi-Service-Setup.
 
-Starten:
-```
-docker compose -f docker-compose.orch.yml up -d --build
-```
 
-Stoppen:
-```
-docker compose -f docker-compose.orch.yml down -v
-```
+
 
 Services:
 | Service  | Port | Beschreibung          |
@@ -160,6 +141,9 @@ Services:
 | Backend  | 8000 | FastAPI               |
 | Frontend | 5500 | Nginx Static Frontend |
 | Postgres | 5432 | Persistente Datenbank (`social_db_data`)|
+
+
+
 
 ## 🧪 Orchestrierte Tests (Backend + Frontend + DB)
 
