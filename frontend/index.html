@@ -86,6 +86,7 @@
       justify-content: space-between;
       font-size: 0.9rem;
       margin-bottom: 0.4rem;
+      gap: 1rem;
     }
 
     .post-user {
@@ -111,6 +112,12 @@
 
     .filters input {
       max-width: 200px;
+    }
+
+    .thumb-link {
+      display: inline-block;
+      margin-top: 0.35rem;
+      font-size: 0.85rem;
     }
   </style>
 </head>
@@ -168,6 +175,14 @@
       statusDiv.className = ok ? "status-ok" : "status-error";
     }
 
+    // helper: API_BASE + Pfad sauber zusammenbauen
+    const base = API_BASE.replace(/\/+$/, "");
+    const toUrl = (p) => {
+      p = (p || "").trim();
+      if (!p) return "";
+      return base + (p.startsWith("/") ? p : "/" + p);
+    };
+
     function renderPosts(posts) {
       postsContainer.innerHTML = "";
 
@@ -192,10 +207,11 @@
         // Strings säubern
         const thumbPath = (post.image_small || "").trim();
         const originalPath = (post.image || "").trim();
-        // Effektiver Pfad: zuerst Thumbnail, sonst Original
-        const effectivePath = thumbPath || originalPath;
 
-        // Text rechts im Header
+        const thumbUrl = toUrl(thumbPath);
+        const originalUrl = toUrl(originalPath);
+
+        // Text rechts im Header (zeigt Pfad an)
         if (thumbPath) {
           imageSpan.textContent = thumbPath;
         } else if (originalPath) {
@@ -213,38 +229,46 @@
         div.appendChild(textP);
 
         // Bild anzeigen, falls es überhaupt einen Pfad gibt
-        if (effectivePath) {
+        // Bild nur anzeigen, wenn Thumbnail vorhanden ist
+        if (thumbUrl) {
           const img = document.createElement("img");
           img.className = "post-image";
-
-          // API_BASE + Pfad zusammenbauen
-          img.src =
-            API_BASE.replace(/\/+$/, "") +
-            (effectivePath.startsWith("/") ? effectivePath : "/" + effectivePath);
-
-          img.alt = "post image";
+          img.src = thumbUrl;                 // nur Thumbnail
+          img.alt = "post thumbnail";
           img.style.cursor = "pointer";
+
+          // Klick: Original öffnen (wenn vorhanden)
           img.addEventListener("click", () => {
-            window.open(img.src, "_blank");
+            window.open(originalUrl || thumbUrl, "_blank");
           });
 
           div.appendChild(img);
 
-          // Hinweis nur, wenn es NOCH KEIN Thumbnail gibt
-          if (!thumbPath && originalPath) {
-            const info = document.createElement("div");
-            info.style.fontSize = "0.8rem";
-            info.style.color = "#6b7280";
-            div.appendChild(info);
-          }
+          // Link "Thumbnail anzeigen"
+          const a = document.createElement("a");
+          a.className = "thumb-link";
+          a.href = thumbUrl;
+          a.target = "_blank";
+          a.rel = "noopener";
+          a.textContent = "Thumbnail anzeigen";
+          div.appendChild(a);
+
+        } else {
+          // Thumbnail fehlt -> KEIN Bild anzeigen, nur Hinweis
+          const info = document.createElement("div");
+          info.style.fontSize = "0.85rem";
+          info.style.color = "#dc2626";
+          info.style.marginTop = "0.4rem";
+          info.textContent = "Kein Thumbnail vorhanden (noch nicht erzeugt oder Fehler).";
+          div.appendChild(info);
         }
+
 
         postsContainer.appendChild(div);
       });
     }
 
-
-    async function loadPosts(userFilter = null) {
+    async function loadPosts(userFilter = null, returnData = false) {
       try {
         let url;
         if (userFilter && userFilter.trim() !== "") {
@@ -253,13 +277,7 @@
           url = `${API_BASE}/posts`;
         }
 
-        console.log("Fetching posts from:", url);
-
-        const res = await fetch(url, {
-          method: "GET",
-        });
-
-        console.log("Status:", res.status);
+        const res = await fetch(url, { method: "GET" });
 
         if (!res.ok) {
           const text = await res.text();
@@ -268,11 +286,34 @@
 
         const data = await res.json();
         renderPosts(data);
+
+        if (returnData) return data;
       } catch (err) {
         console.error(err);
         postsContainer.innerHTML =
           "<p style='color:#dc2626'>Error loading posts. Check console.</p>";
       }
+    }
+
+
+    function refreshUntilThumbnailsReady(userFilter = null, maxTries = 10, intervalMs = 800) {
+      let tries = 0;
+
+      const timer = setInterval(async () => {
+        tries++;
+
+        // Posts laden
+        const posts = await loadPosts(userFilter, true); // true => "return data"
+        if (!Array.isArray(posts)) return;
+
+        // Prüfen: gibt es noch Posts ohne Thumbnail, obwohl Original existiert?
+        const missingThumbs = posts.some(p => (p.image && !p.image_small));
+
+        // Stop, wenn alle Thumbs da oder maxTries erreicht
+        if (!missingThumbs || tries >= maxTries) {
+          clearInterval(timer);
+        }
+      }, intervalMs);
     }
 
     // a) Handle submit – jetzt mit File-Upload (FormData)
@@ -306,7 +347,9 @@
 
         setStatus("Post created successfully!", true);
         form.reset();
-        await loadPosts(); // reload list
+        const currentFilter = filterInput.value.trim() || null;
+        await loadPosts(currentFilter);
+        refreshUntilThumbnailsReady(currentFilter);
       } catch (err) {
         console.error(err);
         setStatus("Error creating post: " + err.message, false);

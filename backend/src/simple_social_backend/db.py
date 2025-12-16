@@ -14,17 +14,42 @@ DB_PATH = Path(__file__).resolve().parent.parent.parent / "social.db"
 
 
 def _create_engine():
+    """Engine-Auswahl.
+
+    Ziel:
+    - Docker: PostgreSQL via DATABASE_URL ("db" Hostname ist im Docker-Netz erreichbar)
+    - Lokal: NICHT versuchen, auf Host "db" zu verbinden (würde scheitern) → SQLite-Fallback
+      Optional: wenn DATABASE_URL_LOCAL auf localhost/127.0.0.1 zeigt, kann lokal auch Postgres genutzt werden.
+    """
+
+    def _running_in_docker() -> bool:
+        # Standard-Indikator in Docker
+        if Path("/.dockerenv").exists():
+            return True
+        # Fallback: cgroup-Hinweise (Linux)
+        try:
+            cgroup = Path("/proc/1/cgroup")
+            if cgroup.exists() and "docker" in cgroup.read_text().lower():
+                return True
+        except Exception:
+            pass
+        return False
+
     database_url = os.getenv("DATABASE_URL")
+    database_url_local = os.getenv("DATABASE_URL_LOCAL")
 
-    if database_url:
-        # z.B. Docker / echte DB
-        return create_engine(
-            database_url,
-            echo=False,
-            pool_pre_ping=True,
-        )
+    if _running_in_docker():
+        # In Docker ist "db" ein gültiger Hostname (docker-compose).
+        if database_url:
+            return create_engine(database_url, echo=False, pool_pre_ping=True)
+        if database_url_local:
+            return create_engine(database_url_local, echo=False, pool_pre_ping=True)
 
-    # Lokaler Fallback (nur außerhalb von Docker sinnvoll)
+    # Außerhalb von Docker: "db" ist i.d.R. NICHT erreichbar. Nur nutzen, wenn explizit localhost.
+    if database_url_local and ("@localhost" in database_url_local or "@127.0.0.1" in database_url_local):
+        return create_engine(database_url_local, echo=False, pool_pre_ping=True)
+
+    # Lokaler Fallback: SQLite
     return create_engine(
         f"sqlite:///{DB_PATH}",
         echo=False,

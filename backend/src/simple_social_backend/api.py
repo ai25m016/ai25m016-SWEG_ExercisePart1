@@ -5,6 +5,12 @@ from typing import List
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv, find_dotenv
+
+# Lädt automatisch die Repo-Root .env (ohne dass du --env-file oder $env:... setzen musst)
+# Überschreibt vorhandene Environment-Variablen NICHT (override=False ist Default).
+load_dotenv(find_dotenv())
+
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -50,10 +56,19 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Bilder statisch ausliefern
+# Bilder-Verzeichnis: stabil, egal ob du aus Repo-Root oder aus backend/ startest
+IMAGES_DIR = Path(
+    os.getenv(
+        "IMAGES_DIR",
+        # Default: <repo>/backend/images
+        Path(__file__).resolve().parents[2] / "images",
+    )
+).resolve()
+
+# Bilder statisch ausliefern (URLs bleiben /images/...
 app.mount(
     "/images",
-    StaticFiles(directory="images", check_dir=False),
+    StaticFiles(directory=str(IMAGES_DIR), check_dir=False),
     name="images",
 )
 
@@ -84,8 +99,8 @@ async def create_post(
     - Event in Queue legen
     """
 
-    # Bilder-Verzeichnis anlegen (z.B. images/original/)
-    base_dir = Path("images") / "original"
+    # Bilder-Verzeichnis anlegen (z.B. <IMAGES_DIR>/original/)
+    base_dir = IMAGES_DIR / "original"
     base_dir.mkdir(parents=True, exist_ok=True)
 
     # Dateiname generieren (einfach, aber eindeutig genug für die Übung)

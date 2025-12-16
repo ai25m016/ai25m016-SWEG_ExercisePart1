@@ -1,10 +1,14 @@
 FROM python:3.12-slim
 
-WORKDIR /app
+WORKDIR /app/image_resizer
 
-# Abhängigkeiten, falls du Pillow / requests / pika brauchst
-RUN pip install --no-cache-dir pika requests Pillow
+# Build backend for building the package (hatchling)
+RUN pip install --no-cache-dir hatchling
 
-COPY main.py .
+# Install the resizer package (console script: social-resizer)
+COPY pyproject.toml ./
+COPY src ./src
 
-CMD ["python", "main.py"]
+RUN pip install --no-cache-dir .
+
+CMD ["social-resizer"]
