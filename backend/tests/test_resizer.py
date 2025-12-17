@@ -84,7 +84,7 @@ def main() -> int:
     print(f"IMAGES_DIR={IMAGES_DIR}")
     print(f"CHECK_FS={CHECK_FS}")
 
-    wait_for_backend(timeout_s=30)
+    wait_for_backend(timeout_s=120)
 
     img_path = ensure_test_image()
     print("Using test image:", img_path)

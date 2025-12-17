@@ -66,15 +66,21 @@ def make_thumb_paths(image_url: str):
     return fs_original, fs_thumb, url_thumb
 
 def connect_rabbitmq():
+    creds = pika.PlainCredentials(
+        os.getenv("RABBITMQ_USER", "test"),
+        os.getenv("RABBITMQ_PASSWORD", "test"),
+    )
+
     params = pika.ConnectionParameters(
         host=RABBITMQ_HOST,
+        credentials=creds,
         heartbeat=60,
         blocked_connection_timeout=30,
-        connection_attempts=1,   # wir machen die Retries selbst
+        connection_attempts=1,
         retry_delay=0,
     )
 
-    for attempt in range(1, 31):  # ~30 Versuche
+    for attempt in range(1, 31):
         try:
             print(f"⏳ RabbitMQ connect Versuch {attempt}/30 ...")
             return pika.BlockingConnection(params)
@@ -84,12 +90,13 @@ def connect_rabbitmq():
 
     raise RuntimeError("RabbitMQ nicht erreichbar nach 30s")
 
+
 def main():
     print("Image-Resizer startet...")
     print(f"Verbinde zu RabbitMQ auf {RABBITMQ_HOST}, Queue: {QUEUE_NAME}")
     print(f"IMAGES_DIR = {IMAGES_DIR}")
 
-    params = pika.ConnectionParameters(host=RABBITMQ_HOST)
+
     connection = connect_rabbitmq()
     channel = connection.channel()
     channel.queue_declare(queue=QUEUE_NAME, durable=True)

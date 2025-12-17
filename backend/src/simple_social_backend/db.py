@@ -10,7 +10,10 @@ from sqlmodel import SQLModel, create_engine, Session, select
 from .models import Post
 
 # Lokale SQLite-DB als Fallback
-DB_PATH = Path(__file__).resolve().parent.parent.parent / "social.db"
+# Lokale SQLite-DB als Fallback (Default)
+DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent.parent / "social.db"
+# ENV Override (für Tests)
+DB_PATH = Path(os.getenv("DB_PATH", str(DEFAULT_DB_PATH)))
 
 
 def _create_engine():
@@ -21,7 +24,12 @@ def _create_engine():
     - Lokal: NICHT versuchen, auf Host "db" zu verbinden (würde scheitern) → SQLite-Fallback
       Optional: wenn DATABASE_URL_LOCAL auf localhost/127.0.0.1 zeigt, kann lokal auch Postgres genutzt werden.
     """
-
+    if os.getenv("DB_PATH"):
+        return create_engine(
+            f"sqlite:///{DB_PATH}",
+            echo=False,
+            connect_args={"check_same_thread": False},
+        )
     def _running_in_docker() -> bool:
         # Standard-Indikator in Docker
         if Path("/.dockerenv").exists():
