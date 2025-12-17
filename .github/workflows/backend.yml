@@ -9,7 +9,7 @@ on:
       - 'release/**'
     paths:
       - 'backend/**'
-      - '.github/workflows/backend-docker.yml'
+      - '.github/workflows/backend.yml'
   pull_request:
     branches:
       - main
