@@ -9,7 +9,7 @@ import pytest
 import requests
 import pika
 
-def _wait_amqp_ready(host: str, user: str, pw: str, timeout_s: int = 30):
+def _wait_amqp_ready(host: str, user: str, pw: str, timeout_s: int = 120):
     end = time.time() + timeout_s
     last = None
 
@@ -27,7 +27,7 @@ def _wait_amqp_ready(host: str, user: str, pw: str, timeout_s: int = 30):
 
     raise RuntimeError(f"RabbitMQ AMQP not ready: {last}")
 
-def _wait_http(url: str, timeout_s: int = 30):
+def _wait_http(url: str, timeout_s: int = 120):
     end = time.time() + timeout_s
     last = None
     while time.time() < end:
@@ -58,7 +58,7 @@ def rabbitmq():
     """
     host, port = "127.0.0.1", 5672
     if _port_open(host, port):
-        _wait_amqp_ready(host, "test", "test", 30)
+        _wait_amqp_ready(host, "test", "test", 120)
 
         yield {"host": host, "port": port}
         return
@@ -83,7 +83,7 @@ def rabbitmq():
             time.sleep(0.5)
         if not _port_open(host, port):
             raise RuntimeError("RabbitMQ did not start on 5672")
-        _wait_amqp_ready(host, "test", "test", 30)
+        _wait_amqp_ready(host, "test", "test", 120)
         yield {"host": host, "port": port}
     finally:
         subprocess.run(["docker", "rm", "-f", name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -97,7 +97,7 @@ def backend_server(tmp_path, rabbitmq):
     E2E_EXTERNAL = os.getenv("E2E_EXTERNAL") == "1"
     if E2E_EXTERNAL:
         base = os.getenv("BACKEND_BASE_URL", "http://127.0.0.1:8000")
-        _wait_http(f"{base}/posts", timeout_s=30)
+        _wait_http(f"{base}/posts", timeout_s=120)
         images_dir = tmp_path / "images"
         (images_dir / "original").mkdir(parents=True, exist_ok=True)
         (images_dir / "thumbs").mkdir(parents=True, exist_ok=True)
@@ -130,7 +130,7 @@ def backend_server(tmp_path, rabbitmq):
 
 
     try:
-        _wait_http("http://127.0.0.1:8001/posts", timeout_s=30)
+        _wait_http("http://127.0.0.1:8001/posts", timeout_s=120)
         yield {"base": "http://127.0.0.1:8001", "images_dir": str(images_dir), "proc": p}
     finally:
         p.terminate()
