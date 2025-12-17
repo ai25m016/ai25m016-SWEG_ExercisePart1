@@ -21,6 +21,12 @@ dev = [
     "pytest>=8.4.2",
 ]
 
+[project.optional-dependencies]
+dev = [
+  "httpx>=0.28.1",
+  "pytest>=8.4.2",
+]
+
 # deine CLI-Kommandos – jetzt mit NEUEM Paketnamen
 [project.scripts]
 social-seed = "simple_social_backend.cli:seed"

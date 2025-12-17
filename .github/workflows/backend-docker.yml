@@ -1,0 +1,71 @@
+name: Backend Tests (Docker image)
+
+on:
+  push:
+    branches:
+      - "feature/**"
+      - "bugfix/**"
+      - "hotfix/**"
+      - "release/**"
+    paths:
+      - "backend/**"
+      - ".github/workflows/backend-docker.yml"
+  pull_request:
+    branches:
+      - main
+      - develop
+
+jobs:
+  e2e_docker_compose:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build & start services
+        run: |
+          docker compose -f docker-compose.queue.local.yml up -d --build rabbitmq db backend image-resizer
+          docker compose -f docker-compose.queue.local.yml ps
+
+      - name: Wait for backend HTTP
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8000/posts >/dev/null; then
+              echo "Backend is up!"
+              exit 0
+            fi
+            echo "Waiting for backend... ($i/60)"
+            sleep 1
+          done
+          echo "Backend did not become ready in time"
+          docker compose logs --no-color --tail=200 backend image-resizer rabbitmq db
+          exit 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: ${{ env.ACT && '' || 'pip' }}
+
+      - name: Install test deps
+        run: |
+          python -m pip install -U pip
+          # installs, damit die Pakete + console scripts vorhanden sind
+          pip install -e image_resizer
+          pip install -e backend
+          # Starlette/FastAPI TestClient braucht httpx:
+          pip install httpx pytest pillow requests
+
+      - name: E2E against running docker services
+        env:
+          E2E_EXTERNAL: "1"
+          BACKEND_BASE_URL: "http://127.0.0.1:8000"
+        run: pytest backend/tests -m e2e -q -s
+
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose logs --no-color --tail=400
+
+      - name: Shutdown
+        if: always()
+        run: docker compose -f docker-compose.queue.local.yml down -v
+

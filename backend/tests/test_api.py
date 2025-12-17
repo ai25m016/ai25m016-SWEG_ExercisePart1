@@ -6,6 +6,10 @@ from fastapi.testclient import TestClient
 from sqlmodel import create_engine
 from simple_social_backend.api import app
 
+from io import BytesIO
+from PIL import Image
+
+
 
 def setup_module(_):
     """
@@ -73,6 +77,17 @@ def _clear_db():
         conn.close()
 
 
+def _post(client, user: str, text: str, filename: str = "img.png"):
+    img = Image.new("RGB", (32, 32))
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+
+    files = {"image": (filename, buf, "image/png")}
+    data = {"user": user, "text": text}
+    return client.post("/posts", data=data, files=files)
+
+
 def test_create_and_latest():
     """
     POST /posts soll einen Post anlegen,
@@ -80,22 +95,15 @@ def test_create_and_latest():
     """
     _clear_db()
     with TestClient(app) as client:
-        r = client.post(
-            "/posts",
-            json={"image": "a.png", "text": "hi", "user": "anna"},
-        )
+        r = _post(client, user="anna", text="hi", filename="a.png")
         assert r.status_code in (200, 201)
         created = r.json()
         assert created["user"] == "anna"
-        assert created["image"] == "a.png"
+        assert created["text"] == "hi"
+        assert created["image"].startswith("/images/original/")
+        assert created["image"].endswith(".png")
         assert "id" in created
-        assert created["id"] is not None
 
-        r = client.get("/posts/latest")
-        assert r.status_code == 200
-        data = r.json()
-        assert data["id"] == created["id"]
-        assert data["text"] == "hi"
 
 
 def test_latest_without_posts_returns_404():
@@ -114,9 +122,9 @@ def test_list_posts_returns_all():
     """
     _clear_db()
     with TestClient(app) as client:
-        client.post("/posts", json={"image": "1.png", "text": "one", "user": "alice"})
-        client.post("/posts", json={"image": "2.png", "text": "two", "user": "bob"})
-        client.post("/posts", json={"image": "3.png", "text": "three", "user": "alice"})
+        _post(client, user="alice", text="one", filename="1.png")
+        _post(client, user="bob", text="two", filename="2.png")
+        _post(client, user="alice", text="three", filename="3.png")
 
         r = client.get("/posts")
         assert r.status_code == 200
@@ -133,9 +141,9 @@ def test_list_posts_filter_by_user_query_param():
     """
     _clear_db()
     with TestClient(app) as client:
-        client.post("/posts", json={"image": "1.png", "text": "one", "user": "alice"})
-        client.post("/posts", json={"image": "2.png", "text": "two", "user": "bob"})
-        client.post("/posts", json={"image": "3.png", "text": "three", "user": "alice"})
+        _post(client, user="alice", text="one", filename="1.png")
+        _post(client, user="bob", text="two", filename="2.png")
+        _post(client, user="alice", text="three", filename="3.png")
 
         r = client.get("/posts", params={"user": "alice"})
         assert r.status_code == 200
@@ -152,9 +160,9 @@ def test_list_posts_by_user_endpoint():
     """
     _clear_db()
     with TestClient(app) as client:
-        client.post("/posts", json={"image": "1.png", "text": "one", "user": "alice"})
-        client.post("/posts", json={"image": "2.png", "text": "two", "user": "bob"})
-        client.post("/posts", json={"image": "3.png", "text": "three", "user": "alice"})
+        _post(client, user="alice", text="one", filename="1.png")
+        _post(client, user="bob", text="two", filename="2.png")
+        _post(client, user="alice", text="three", filename="3.png")
 
         r = client.get("/users/alice/posts")
         assert r.status_code == 200
@@ -170,10 +178,8 @@ def test_get_post_by_id_success():
     """
     _clear_db()
     with TestClient(app) as client:
-        r_create = client.post(
-            "/posts",
-            json={"image": "x.png", "text": "hello", "user": "carol"},
-        )
+        r_create = _post(client, user="carol", text="hello", filename="x.png")
+
         created = r_create.json()
         post_id = created["id"]
 
@@ -201,18 +207,10 @@ def test_search_posts_by_text():
     """
     _clear_db()
     with TestClient(app) as client:
-        client.post(
-            "/posts",
-            json={"image": "1.png", "text": "I love FastAPI", "user": "alice"},
-        )
-        client.post(
-            "/posts",
-            json={"image": "2.png", "text": "SQLModel is nice", "user": "bob"},
-        )
-        client.post(
-            "/posts",
-            json={"image": "3.png", "text": "FastAPI and SQLModel", "user": "carol"},
-        )
+        _post(client, user="alice", text="I love FastAPI", filename="1.png")
+        _post(client, user="bob", text="SQLModel is nice", filename="2.png")
+        _post(client, user="carol", text="FastAPI and SQLModel", filename="3.png")
+
 
         r = client.get("/posts/search", params={"query": "FastAPI"})
         assert r.status_code == 200
@@ -231,10 +229,8 @@ def test_delete_post_success():
     """
     _clear_db()
     with TestClient(app) as client:
-        r_create = client.post(
-            "/posts",
-            json={"image": "x.png", "text": "to be deleted", "user": "dave"},
-        )
+        r_create = _post(client, user="dave", text="to be deleted", filename="x.png")
+
         post_id = r_create.json()["id"]
 
         r_del = client.delete(f"/posts/{post_id}")

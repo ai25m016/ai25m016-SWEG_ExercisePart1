@@ -60,8 +60,8 @@ services:
       timeout: 5s
       retries: 20
     environment:
-      RABBITMQ_DEFAULT_USER: guest
-      RABBITMQ_DEFAULT_PASS: guest
+      RABBITMQ_DEFAULT_USER: test
+      RABBITMQ_DEFAULT_PASS: test
 
   image-resizer:
     build:
