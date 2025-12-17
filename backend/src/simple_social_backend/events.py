@@ -21,7 +21,11 @@ def publish_image_resize(post_id: int, image: str) -> None:
     if pika is None or os.getenv("DISABLE_QUEUE", "").lower() == "true":
         return
 
-    params = pika.ConnectionParameters(host=RABBITMQ_HOST)
+    creds = pika.PlainCredentials(
+        os.getenv("RABBITMQ_USER", "guest"),
+        os.getenv("RABBITMQ_PASSWORD", "guest"),
+    )
+    params = pika.ConnectionParameters(host=RABBITMQ_HOST, credentials=creds)
     connection = pika.BlockingConnection(params)
     channel = connection.channel()
 

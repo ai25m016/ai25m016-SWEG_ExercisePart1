@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List
 
 import os
@@ -105,7 +105,7 @@ async def create_post(
 
     # Dateiname generieren (einfach, aber eindeutig genug für die Übung)
     suffix = Path(image.filename).suffix or ".jpg"
-    timestamp = int(datetime.utcnow().timestamp())
+    timestamp = int(datetime.now(timezone.utc).timestamp())
     filename = f"{timestamp}_{user}{suffix}"
     file_path = base_dir / filename
 
