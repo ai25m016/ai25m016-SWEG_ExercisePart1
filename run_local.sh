@@ -28,7 +28,7 @@ assert_command() { command -v "$1" >/dev/null 2>&1 || { echo "Missing command: $
 
 echo "Repo: $REPO"
 echo "Using:"
-echo "  RabbitMQ: localhost:5672 (UI http://localhost:15672 guest/guest)"
+echo "  RabbitMQ: localhost:5672 (UI http://localhost:15672 test/test)"
 echo "  Backend : http://127.0.0.1:${BACKEND_PORT}"
 echo "  Frontend: http://127.0.0.1:${FRONTEND_PORT}"
 echo

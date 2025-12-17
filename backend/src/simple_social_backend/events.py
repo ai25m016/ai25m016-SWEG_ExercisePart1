@@ -22,8 +22,8 @@ def publish_image_resize(post_id: int, image: str) -> None:
         return
 
     creds = pika.PlainCredentials(
-        os.getenv("RABBITMQ_USER", "guest"),
-        os.getenv("RABBITMQ_PASSWORD", "guest"),
+        os.getenv("RABBITMQ_USER", "test"),
+        os.getenv("RABBITMQ_PASSWORD", "test"),
     )
     params = pika.ConnectionParameters(host=RABBITMQ_HOST, credentials=creds)
     connection = pika.BlockingConnection(params)

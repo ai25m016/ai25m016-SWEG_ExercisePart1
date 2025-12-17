@@ -67,8 +67,8 @@ def make_thumb_paths(image_url: str):
 
 def connect_rabbitmq():
     creds = pika.PlainCredentials(
-        os.getenv("RABBITMQ_USER", "guest"),
-        os.getenv("RABBITMQ_PASSWORD", "guest"),
+        os.getenv("RABBITMQ_USER", "test"),
+        os.getenv("RABBITMQ_PASSWORD", "test"),
     )
 
     params = pika.ConnectionParameters(
