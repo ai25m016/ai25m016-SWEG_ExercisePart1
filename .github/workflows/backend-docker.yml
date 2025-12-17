@@ -25,7 +25,7 @@ jobs:
       - name: Build & start services
         run: |
           docker compose -f docker-compose.queue.local.yml up -d --build rabbitmq db backend image-resizer
-          docker compose ps
+          docker compose -f docker-compose.queue.local ps
 
       - name: Wait for backend HTTP
         run: |
