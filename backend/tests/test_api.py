@@ -8,7 +8,11 @@ from simple_social_backend.api import app
 
 from io import BytesIO
 from PIL import Image
+import pytest
+import shutil
+import time
 
+pytestmark = pytest.mark.api
 
 
 def setup_module(_):
@@ -38,25 +42,39 @@ def setup_module(_):
 
 
 def teardown_module(_):
-    """
-    Läuft einmal nach allen Tests.
-    Löscht die Test-Datenbank und zugehörige WAL/SHM-Dateien.
-    """
     db = importlib.import_module("simple_social_backend.db")
+
+    # Engine/Connections freigeben (sonst bleiben DB-Dateien unter Windows gelockt)
     try:
-        sqlite3.connect(db.DB_PATH).close()
+        db.ENGINE.dispose()
     except Exception:
         pass
 
+    # DB-Dateien löschen (mit retry)
     for p in [
         db.DB_PATH,
         db.DB_PATH.with_suffix(".db-wal"),
         db.DB_PATH.with_suffix(".db-shm"),
     ]:
+        for _ in range(30):
+            try:
+                p.unlink()
+                break
+            except FileNotFoundError:
+                break
+            except PermissionError:
+                time.sleep(0.1)
+
+    # Images-Ordner löschen (weil du IMAGES_DIR auf backend/tests/images gesetzt hast)
+    images_dir = Path(__file__).parent / "images"
+    for _ in range(30):
         try:
-            p.unlink()
-        except Exception:
-            pass
+            shutil.rmtree(images_dir)
+            break
+        except FileNotFoundError:
+            break
+        except PermissionError:
+            time.sleep(0.1)
 
 
 def _clear_db():

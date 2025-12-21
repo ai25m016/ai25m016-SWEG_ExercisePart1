@@ -9,6 +9,7 @@ on:
       - 'release/**'
     paths:
       - 'backend/**'
+      - 'image_resizer/**'
       - '.github/workflows/backend.yml'
   pull_request:
     branches:
@@ -44,14 +45,11 @@ jobs:
       - name: Install deps
         run: |
           python -m pip install -U pip
-          if [ -f backend/requirements.txt ]; then pip install -r backend/requirements.txt; fi
-          if [ -f image_resizer/requirements.txt ]; then pip install -r image_resizer/requirements.txt; fi
           pip install -e image_resizer
-          pip install httpx
-          pip install -e backend || true
+          pip install -e "backend[dev]"
 
-      - name: Unit tests (API)
-        run: pytest backend/tests/test_api.py -q
+      - name: API tests
+        run: python -m pytest backend/tests -m api -q
 
       - name: E2E tests
         env:
@@ -59,4 +57,4 @@ jobs:
           RABBITMQ_USER: test
           RABBITMQ_PASSWORD: test
           IMAGE_RESIZE_QUEUE: image_resize
-        run: pytest backend/tests -m e2e -q -s
+        run: python -m pytest backend/tests -m e2e -q -s
