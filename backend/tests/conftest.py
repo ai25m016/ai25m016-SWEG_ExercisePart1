@@ -5,6 +5,7 @@ import socket
 import subprocess
 from pathlib import Path
 
+import shutil
 import pytest
 import requests
 import pika
@@ -98,10 +99,22 @@ def backend_server(tmp_path, rabbitmq):
     if E2E_EXTERNAL:
         base = os.getenv("BACKEND_BASE_URL", "http://127.0.0.1:8000")
         _wait_http(f"{base}/posts", timeout_s=120)
+
         images_dir = tmp_path / "images"
         (images_dir / "original").mkdir(parents=True, exist_ok=True)
         (images_dir / "thumbs").mkdir(parents=True, exist_ok=True)
-        yield {"base": base, "images_dir": str(images_dir), "proc": None}
+
+        try:
+            yield {"base": base, "images_dir": str(images_dir), "proc": None}
+        finally:
+            for _ in range(30):
+                try:
+                    shutil.rmtree(images_dir)
+                    break
+                except FileNotFoundError:
+                    break
+                except PermissionError:
+                    time.sleep(0.1)
         return
     repo_root = Path(__file__).resolve().parents[2]
     backend_dir = repo_root / "backend"
@@ -135,15 +148,15 @@ def backend_server(tmp_path, rabbitmq):
     finally:
         p.terminate()
         try:
-            p.wait(timeout=10)   # etwas länger
+            p.wait(timeout=10)
         except subprocess.TimeoutExpired:
             p.kill()
             p.wait(timeout=5)
 
-        # Windows: Datei kann noch kurz gelockt sein -> retry
         wal = Path(str(db_file) + "-wal")
         shm = Path(str(db_file) + "-shm")
 
+        # DB cleanup
         for f in [db_file, wal, shm]:
             for _ in range(30):
                 try:
@@ -154,6 +167,15 @@ def backend_server(tmp_path, rabbitmq):
                 except PermissionError:
                     time.sleep(0.1)
 
+        # images cleanup
+        for _ in range(30):
+            try:
+                shutil.rmtree(images_dir)
+                break
+            except FileNotFoundError:
+                break
+            except PermissionError:
+                time.sleep(0.1)
 
 
 @pytest.fixture
@@ -202,3 +224,4 @@ def resizer_process(backend_server, rabbitmq):
             p.wait(timeout=5)
         except subprocess.TimeoutExpired:
             p.kill()
+            p.wait(timeout=5)
