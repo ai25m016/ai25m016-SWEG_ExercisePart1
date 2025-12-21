@@ -16,8 +16,10 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-  "pytest>=8.4.2",
-  "httpx>=0.28.1",
+  "pytest",
+  "requests",
+  "pillow",
+  "httpx",
 ]
 
 # deine CLI-Kommandos – jetzt mit NEUEM Paketnamen
