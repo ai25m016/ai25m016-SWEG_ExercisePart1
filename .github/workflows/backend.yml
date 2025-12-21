@@ -49,7 +49,7 @@ jobs:
           pip install -e "backend[dev]"
 
       - name: API tests
-        run: pytest backend/tests -m api -q
+        run: python -m pytest backend/tests -m api -q
 
       - name: E2E tests
         env:
@@ -57,4 +57,4 @@ jobs:
           RABBITMQ_USER: test
           RABBITMQ_PASSWORD: test
           IMAGE_RESIZE_QUEUE: image_resize
-        run: pytest backend/tests -m e2e -q -s
+        run: python -m pytest backend/tests -m e2e -q -s
