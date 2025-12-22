@@ -83,4 +83,4 @@ frontend/.idea/
 exporting/
 
 # BERT Modell, zu groß für GitHub
-models/bert_clean.pth
+sentiment_analysis/models/bert_clean.pth
