@@ -96,7 +96,6 @@ def rabbitmq():
     finally:
         subprocess.run(["docker", "rm", "-f", name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-
 @pytest.fixture
 def backend_server(tmp_path, rabbitmq):
     """
@@ -104,7 +103,6 @@ def backend_server(tmp_path, rabbitmq):
     """
     E2E_EXTERNAL = os.getenv("E2E_EXTERNAL") == "1"
     if E2E_EXTERNAL:
-        # ... (keep existing external logic) ...
         base = os.getenv("BACKEND_BASE_URL", "http://127.0.0.1:8000")
         _wait_http(f"{base}/posts", timeout_s=120)
 
@@ -115,7 +113,6 @@ def backend_server(tmp_path, rabbitmq):
         try:
             yield {"base": base, "images_dir": str(images_dir), "proc": None}
         finally:
-            # ... (keep cleanup logic) ...
             for _ in range(30):
                 try:
                     shutil.rmtree(images_dir)
@@ -125,6 +122,8 @@ def backend_server(tmp_path, rabbitmq):
                 except PermissionError:
                     time.sleep(0.1)
         return
+
+    # --- INTERNAL BACKEND SETUP ---
 
     repo_root = Path(__file__).resolve().parents[2]
     backend_dir = repo_root / "backend"
@@ -142,8 +141,18 @@ def backend_server(tmp_path, rabbitmq):
     # --- [FIX END] ---
 
     db_file = tmp_path / "test_social.db"
+    
+    # ENV VAR SETUP
     env["DB_PATH"] = str(db_file)
-    env["RABBITMQ_HOST"] = rabbitmq["host"]
+    
+    # ---------------------------------------------------------
+    # FORCE 127.0.0.1 HERE
+    # We ignore what the 'rabbitmq' fixture says and force IPv4
+    # to prevent the "ReadTimeout" hang.
+    # ---------------------------------------------------------
+    env["RABBITMQ_HOST"] = "127.0.0.1"
+    env["RABBITMQ_PORT"] = "5672"
+    
     env["IMAGE_RESIZE_QUEUE"] = env.get("IMAGE_RESIZE_QUEUE", "image_resize")
     env["BACKEND_BASE_URL"] = "http://127.0.0.1:8001"
     env["RABBITMQ_USER"] = "test"
@@ -153,11 +162,16 @@ def backend_server(tmp_path, rabbitmq):
     # We run with cwd=backend/ and point IMAGES_DIR to that temp dir.
     env["IMAGES_DIR"] = str(images_dir)
 
-    # start backend (no uv, just your venv python)
-    cmd = [sys.executable, "-m", "uvicorn", "simple_social_backend.api:app", "--host", "127.0.0.1", "--port", "8001"]
-    env["PYTHONUNBUFFERED"] = "1"
-    p = subprocess.Popen(cmd, cwd=str(backend_dir), env=env)
+    # Output env vars to console just in case we need to debug again
+    print(f"DEBUG: Starting Backend with RABBITMQ_HOST={env['RABBITMQ_HOST']}")
 
+    # Start backend (no uv, just your venv python)
+    cmd = [sys.executable, "-m", "uvicorn", "simple_social_backend.api:app", "--host", "127.0.0.1", "--port", "8001"]
+    
+    # Ensure stdout isn't buffered so we see logs immediately
+    env["PYTHONUNBUFFERED"] = "1"
+    
+    p = subprocess.Popen(cmd, cwd=str(backend_dir), env=env)
 
     try:
         _wait_http("http://127.0.0.1:8001/posts", timeout_s=120)
@@ -193,94 +207,6 @@ def backend_server(tmp_path, rabbitmq):
                 break
             except PermissionError:
                 time.sleep(0.1)
-
-# @pytest.fixture
-# def backend_server(tmp_path, rabbitmq):
-#     """
-#     Starts backend on 127.0.0.1:8001 with isolated IMAGES_DIR in tmp.
-#     """
-#     E2E_EXTERNAL = os.getenv("E2E_EXTERNAL") == "1"
-#     if E2E_EXTERNAL:
-#         base = os.getenv("BACKEND_BASE_URL", "http://127.0.0.1:8000")
-#         _wait_http(f"{base}/posts", timeout_s=120)
-# 
-#         images_dir = tmp_path / "images"
-#         (images_dir / "original").mkdir(parents=True, exist_ok=True)
-#         (images_dir / "thumbs").mkdir(parents=True, exist_ok=True)
-# 
-#         try:
-#             yield {"base": base, "images_dir": str(images_dir), "proc": None}
-#         finally:
-#             for _ in range(30):
-#                 try:
-#                     shutil.rmtree(images_dir)
-#                     break
-#                 except FileNotFoundError:
-#                     break
-#                 except PermissionError:
-#                     time.sleep(0.1)
-#         return
-#     repo_root = Path(__file__).resolve().parents[2]
-#     backend_dir = repo_root / "backend"
-# 
-#     images_dir = tmp_path / "images"
-#     (images_dir / "original").mkdir(parents=True, exist_ok=True)
-#     (images_dir / "thumbs").mkdir(parents=True, exist_ok=True)
-# 
-#     env = os.environ.copy()
-#     db_file = tmp_path / "test_social.db"
-#     env["DB_PATH"] = str(db_file)
-#     env["RABBITMQ_HOST"] = rabbitmq["host"]
-#     env["IMAGE_RESIZE_QUEUE"] = env.get("IMAGE_RESIZE_QUEUE", "image_resize")
-#     env["BACKEND_BASE_URL"] = "http://127.0.0.1:8001"
-#     env["RABBITMQ_USER"] = "test"
-#     env["RABBITMQ_PASSWORD"] = "test"
-# 
-#     # IMPORTANT: your backend expects IMAGES_DIR relative to cwd ("images") OR absolute.
-#     # We run with cwd=backend/ and point IMAGES_DIR to that temp dir.
-#     env["IMAGES_DIR"] = str(images_dir)
-# 
-#     # start backend (no uv, just your venv python)
-#     cmd = [sys.executable, "-m", "uvicorn", "simple_social_backend.api:app", "--host", "127.0.0.1", "--port", "8001"]
-#     env["PYTHONUNBUFFERED"] = "1"
-#     p = subprocess.Popen(cmd, cwd=str(backend_dir), env=env)
-# 
-# 
-#     try:
-#         _wait_http("http://127.0.0.1:8001/posts", timeout_s=120)
-#         yield {"base": "http://127.0.0.1:8001", "images_dir": str(images_dir), "proc": p}
-#     finally:
-#         p.terminate()
-#         try:
-#             p.wait(timeout=10)
-#         except subprocess.TimeoutExpired:
-#             p.kill()
-#             p.wait(timeout=5)
-# 
-#         wal = Path(str(db_file) + "-wal")
-#         shm = Path(str(db_file) + "-shm")
-# 
-#         # DB cleanup
-#         for f in [db_file, wal, shm]:
-#             for _ in range(30):
-#                 try:
-#                     f.unlink()
-#                     break
-#                 except FileNotFoundError:
-#                     break
-#                 except PermissionError:
-#                     time.sleep(0.1)
-# 
-#         # images cleanup
-#         for _ in range(30):
-#             try:
-#                 shutil.rmtree(images_dir)
-#                 break
-#             except FileNotFoundError:
-#                 break
-#             except PermissionError:
-#                 time.sleep(0.1)
-
 
 @pytest.fixture
 def resizer_process(backend_server, rabbitmq):
