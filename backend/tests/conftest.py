@@ -10,6 +10,13 @@ import pytest
 import requests
 import pika
 
+@pytest.fixture(scope="session", autouse=True)
+def set_test_env():
+    # This disables actual RabbitMQ connections for ALL tests
+    os.environ["DISABLE_QUEUE"] = "true"
+    yield
+    del os.environ["DISABLE_QUEUE"]
+
 def _wait_amqp_ready(host: str, user: str, pw: str, timeout_s: int = 120):
     end = time.time() + timeout_s
     last = None
