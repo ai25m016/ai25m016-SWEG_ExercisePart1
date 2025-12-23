@@ -39,7 +39,7 @@ jobs:
         env:
           DISABLE_QUEUE: "true"
         run: |
-          docker compose -f docker-compose.queue.local.yml up -d --build rabbitmq db backend image-resizer sentiment-analysis
+          docker compose -f docker-compose.queue.local.yml up -d --build rabbitmq db backend image-resizer 
           docker compose -f docker-compose.queue.local.yml ps
 
       - name: Wait for backend HTTP
