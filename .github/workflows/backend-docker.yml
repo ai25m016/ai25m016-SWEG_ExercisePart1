@@ -38,6 +38,7 @@ jobs:
       - name: Build & start services
         # env:
         #   DISABLE_QUEUE: "true"
+        #   bla
         run: |
           docker compose -f docker-compose.queue.local.yml up -d --build rabbitmq db backend image-resizer sentiment-analysis
           docker compose -f docker-compose.queue.local.yml ps
