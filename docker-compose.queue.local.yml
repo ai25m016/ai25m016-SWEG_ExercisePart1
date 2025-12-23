@@ -92,8 +92,22 @@ services:
     image: simple-social-sentiment
     container_name: simple-social-sentiment
     restart: always
-    ports:
-      - "8001:8001" # Expose internally and externally for testing
+    depends_on:
+      - rabbitmq
+      - backend
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: test
+      RABBITMQ_PASSWORD: test
+      # Queues
+      SENTIMENT_QUEUE: sentiment_analysis
+      IMAGE_RESIZE_QUEUE: image_resize
+      # Backend API (to delete bad posts)
+      BACKEND_URL: "http://backend:8000"
+      PYTHONUNBUFFERED: "1"
+    # volumes:
+    #    # Mount the folder so it can access model.pth
+    #   - ./sentiment_analysis:/app
 
 volumes:
   social_db_data_local:

@@ -1,4 +1,5 @@
 import requests
+from .events import publish_image_resize, check_sentiment_rpc
 
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -18,7 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from .events import publish_image_resize  # oder .eventy, wenn du den Namen nicht änderst
+# from .events import publish_image_resize  # oder .eventy, wenn du den Namen nicht änderst
 from .db import (
     init_db,
     add_post,
@@ -88,7 +89,7 @@ app.add_middleware(
 )
 
 # Define the URL for the sentiment service (docker container name)
-SENTIMENT_SERVICE_URL = os.getenv("SENTIMENT_SERVICE_URL", "http://sentiment-analysis:8001/predict")
+# SENTIMENT_SERVICE_URL = os.getenv("SENTIMENT_SERVICE_URL", "http://sentiment-analysis:8001/predict")
 
 @app.post("/posts", response_model=PostOut, summary="Create a new post")
 async def create_post(
@@ -97,76 +98,54 @@ async def create_post(
     user: str = Form(...),
 ):
     """
-    Einen neuen Post anlegen:
-    - Bild-Datei speichern
-    - Post in DB anlegen
-    - Event in Queue legen
+    Create Post Flow:
+    1. Check Sentiment (RPC via RabbitMQ) -> Fail if Negative
+    2. Save Image & DB
+    3. Trigger Resize (Async via RabbitMQ)
     """
 
-    # --- 1. SENTIMENT BEGIN ---
+    # --- 1. GATEKEEPER (RPC CHECK) ---
+    print(f"Checking sentiment for: {text}")
     try:
-        # Send text to the microservice
-        response = requests.post(
-            SENTIMENT_SERVICE_URL, 
-            json={"text": text}, 
-            timeout=5.0
-        )
-        response.raise_for_status()
+        sentiment = check_sentiment_rpc(text) # This WAITS for the AI
+        print(f"Sentiment Result: {sentiment}")
         
-        result = response.json()
-        sentiment = result.get("sentiment")
-        
-        # GATEKEEPER LOGIC
         if sentiment == "Negative":
             raise HTTPException(
                 status_code=400, 
-                detail="Your comment was detected as Negative. We only allow Positive or Neutral vibes!"
+                detail="Comment rejected. Only Positive/Neutral vibes allowed!"
             )
             
-    except requests.RequestException as e:
-        # Decide: Do you want to fail if AI is down? 
-        # Or allow it? Here we log and allow (fail-open) or error (fail-closed).
-        print(f"Sentiment Service Error: {e}")
-        # Option A: Fail if AI is down
-        # raise HTTPException(status_code=503, detail="Sentiment analysis unavailable")
-        
-        # Option B: Pass through if AI is down (safer for demo)
-        pass
+    except Exception as e:
+        # If it's the HTTPException we just raised, pass it through
+        if isinstance(e, HTTPException): raise e
+        # If RabbitMQ fails, we decide: fail safe?
+        print(f"Sentiment Check Failed: {e}")
+        # pass # Uncomment to allow posts even if AI is down
 
-    # --- 1. SENTIMENT END ---
-
-    # Bilder-Verzeichnis anlegen (z.B. <IMAGES_DIR>/original/)
+    # --- 2. SAVE IMAGE & DB (Only if passed above) ---
     base_dir = IMAGES_DIR / "original"
     base_dir.mkdir(parents=True, exist_ok=True)
-
-    # Dateiname generieren (einfach, aber eindeutig genug für die Übung)
+    
     suffix = Path(image.filename).suffix or ".jpg"
     timestamp = int(datetime.now(timezone.utc).timestamp())
     filename = f"{timestamp}_{user}{suffix}"
     file_path = base_dir / filename
 
-    # Datei speichern
     content = await image.read()
     with open(file_path, "wb") as f:
         f.write(content)
 
-    # URL/Pfad, den Frontend & Resizer verwenden
     image_url = f"/images/original/{filename}"
-
-    # In DB speichern
+    
     post_id = add_post(image=str(image_url), text=text, user=user)
     created = get_post_by_id(post_id)
-    if not created:
-        raise HTTPException(status_code=500, detail="Post could not be created")
 
-    # Event für Image-Resizer verschicken (post_id + image)
-    try:
-        publish_image_resize(post_id, created["image"])
-    except Exception as exc:  # noqa: BLE001
-        print(f"Could not publish image resize event: {exc}")
+    # --- 3. TRIGGER RESIZE (ASYNC) ---
+    # We use the OLD function again because now the Sentiment logic is handled separately!
+    publish_image_resize(post_id, created["image"])
 
     return created
-
 
 @app.get("/posts/latest", response_model=PostOut, summary="Get the latest post")
 def latest_post():
