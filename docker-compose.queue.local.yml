@@ -90,7 +90,7 @@ services:
     #build:
     #  context: ./sentiment_analysis
     #  dockerfile: Dockerfile
-    image: simple-social-sentiment
+    # image: simple-social-sentiment
     container_name: simple-social-sentiment
     restart: always
     depends_on:
