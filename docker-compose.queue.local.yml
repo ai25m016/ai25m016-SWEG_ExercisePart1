@@ -86,9 +86,10 @@ services:
       # - images_data:/app/backend/images_data
 
   sentiment-analysis:
-    build:
-      context: ./sentiment_analysis
-      dockerfile: Dockerfile
+    image: ghcr.io/ai25m016/sentiment-analysis:latest
+    #build:
+    #  context: ./sentiment_analysis
+    #  dockerfile: Dockerfile
     image: simple-social-sentiment
     container_name: simple-social-sentiment
     restart: always
