@@ -86,7 +86,7 @@ services:
       # - images_data:/app/backend/images_data
 
   sentiment-analysis:
-    image: ghcr.io/ai25m016/sentiment-analysis:latest
+    image: ghcr.io/moerz1423/sentiment-analysis:latest
     #build:
     #  context: ./sentiment_analysis
     #  dockerfile: Dockerfile
