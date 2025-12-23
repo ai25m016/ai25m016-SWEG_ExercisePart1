@@ -1,3 +1,5 @@
+import requests
+
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import List
@@ -85,6 +87,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Define the URL for the sentiment service (docker container name)
+SENTIMENT_SERVICE_URL = os.getenv("SENTIMENT_SERVICE_URL", "http://sentiment-analysis:8001/predict")
 
 @app.post("/posts", response_model=PostOut, summary="Create a new post")
 async def create_post(
@@ -98,6 +102,38 @@ async def create_post(
     - Post in DB anlegen
     - Event in Queue legen
     """
+
+    # --- 1. SENTIMENT BEGIN ---
+    try:
+        # Send text to the microservice
+        response = requests.post(
+            SENTIMENT_SERVICE_URL, 
+            json={"text": text}, 
+            timeout=5.0
+        )
+        response.raise_for_status()
+        
+        result = response.json()
+        sentiment = result.get("sentiment")
+        
+        # GATEKEEPER LOGIC
+        if sentiment == "Negative":
+            raise HTTPException(
+                status_code=400, 
+                detail="Your comment was detected as Negative. We only allow Positive or Neutral vibes!"
+            )
+            
+    except requests.RequestException as e:
+        # Decide: Do you want to fail if AI is down? 
+        # Or allow it? Here we log and allow (fail-open) or error (fail-closed).
+        print(f"Sentiment Service Error: {e}")
+        # Option A: Fail if AI is down
+        # raise HTTPException(status_code=503, detail="Sentiment analysis unavailable")
+        
+        # Option B: Pass through if AI is down (safer for demo)
+        pass
+
+    # --- 1. SENTIMENT END ---
 
     # Bilder-Verzeichnis anlegen (z.B. <IMAGES_DIR>/original/)
     base_dir = IMAGES_DIR / "original"

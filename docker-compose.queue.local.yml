@@ -31,6 +31,7 @@ services:
       RABBITMQ_PASSWORD: test
       IMAGE_RESIZE_QUEUE: image_resize
       IMAGES_DIR: /app/backend/images
+      SENTIMENT_SERVICE_URL: "http://sentiment-analysis:8001/predict"
       # DISABLE_QUEUE: "false"        # optional explizit
     ports:
       - "8000:8000"
@@ -78,9 +79,21 @@ services:
       IMAGE_RESIZE_QUEUE: image_resize
       BACKEND_BASE_URL: http://backend:8000
       IMAGES_DIR: /app/backend/images
+      PYTHONUNBUFFERED: "1"
     volumes:
       # selbes Volume wie Backend → beide sehen die gleichen Bilddateien
       - images_data:/app/backend/images
+      # - images_data:/app/backend/images_data
+
+  sentiment-analysis:
+    build:
+      context: ./sentiment_analysis
+      dockerfile: Dockerfile
+    image: simple-social-sentiment
+    container_name: simple-social-sentiment
+    restart: always
+    ports:
+      - "8001:8001" # Expose internally and externally for testing
 
 volumes:
   social_db_data_local:
