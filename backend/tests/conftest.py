@@ -134,41 +134,42 @@ def backend_server(tmp_path, rabbitmq):
 
     env = os.environ.copy()
     
-    # --- [FIX START] ---
-    # We must enable the queue for the E2E backend process!
     if "DISABLE_QUEUE" in env:
         del env["DISABLE_QUEUE"]
-    # --- [FIX END] ---
 
     db_file = tmp_path / "test_social.db"
     
-    # ENV VAR SETUP
     env["DB_PATH"] = str(db_file)
     
     # ---------------------------------------------------------
-    # FORCE 127.0.0.1 HERE
-    # We ignore what the 'rabbitmq' fixture says and force IPv4
-    # to prevent the "ReadTimeout" hang.
+    # FIX: Force IPv4, but get Port/Auth from fixture
     # ---------------------------------------------------------
-    env["RABBITMQ_HOST"] = "127.0.0.1"
-    env["RABBITMQ_PORT"] = "5672"
     
+    # 1. Force Host to 127.0.0.1 (Solves the localhost/IPv6 hang)
+    env["RABBITMQ_HOST"] = "127.0.0.1"
+    
+    # 2. Get the REAL port from the fixture (Solves the 5672 timeout)
+    # The fixture likely has keys like 'port' or 'amqp_port'
+    # We fallback to 5672 only if the fixture doesn't specify one.
+    rmq_port = rabbitmq.get("port", rabbitmq.get("amqp_port", "5672"))
+    env["RABBITMQ_PORT"] = str(rmq_port)
+
+    # 3. Get credentials from fixture (don't assume test/test)
+    # If the fixture has specific user/pass, use them. Otherwise default to 'guest'.
+    env["RABBITMQ_USER"] = rabbitmq.get("user", rabbitmq.get("username", "guest"))
+    env["RABBITMQ_PASSWORD"] = rabbitmq.get("password", "guest")
+
+    # Queue name defaults
     env["IMAGE_RESIZE_QUEUE"] = env.get("IMAGE_RESIZE_QUEUE", "image_resize")
     env["BACKEND_BASE_URL"] = "http://127.0.0.1:8001"
-    env["RABBITMQ_USER"] = "test"
-    env["RABBITMQ_PASSWORD"] = "test"
 
-    # IMPORTANT: your backend expects IMAGES_DIR relative to cwd ("images") OR absolute.
-    # We run with cwd=backend/ and point IMAGES_DIR to that temp dir.
     env["IMAGES_DIR"] = str(images_dir)
 
-    # Output env vars to console just in case we need to debug again
-    print(f"DEBUG: Starting Backend with RABBITMQ_HOST={env['RABBITMQ_HOST']}")
+    # Debug print to verify in logs
+    print(f"DEBUG: Backend Config -> Host: {env['RABBITMQ_HOST']}, Port: {env['RABBITMQ_PORT']}, User: {env['RABBITMQ_USER']}")
 
-    # Start backend (no uv, just your venv python)
+    # Start backend
     cmd = [sys.executable, "-m", "uvicorn", "simple_social_backend.api:app", "--host", "127.0.0.1", "--port", "8001"]
-    
-    # Ensure stdout isn't buffered so we see logs immediately
     env["PYTHONUNBUFFERED"] = "1"
     
     p = subprocess.Popen(cmd, cwd=str(backend_dir), env=env)
@@ -187,7 +188,7 @@ def backend_server(tmp_path, rabbitmq):
         wal = Path(str(db_file) + "-wal")
         shm = Path(str(db_file) + "-shm")
 
-        # DB cleanup
+        # cleanup...
         for f in [db_file, wal, shm]:
             for _ in range(30):
                 try:
@@ -198,7 +199,6 @@ def backend_server(tmp_path, rabbitmq):
                 except PermissionError:
                     time.sleep(0.1)
 
-        # images cleanup
         for _ in range(30):
             try:
                 shutil.rmtree(images_dir)
