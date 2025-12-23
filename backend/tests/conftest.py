@@ -143,7 +143,8 @@ def backend_server(tmp_path, rabbitmq):
 
     db_file = tmp_path / "test_social.db"
     env["DB_PATH"] = str(db_file)
-    env["RABBITMQ_HOST"] = rabbitmq["host"]
+    # env["RABBITMQ_HOST"] = rabbitmq["host"]
+    env["RABBITMQ_HOST"] = "127.0.0.1" 
     env["IMAGE_RESIZE_QUEUE"] = env.get("IMAGE_RESIZE_QUEUE", "image_resize")
     env["BACKEND_BASE_URL"] = "http://127.0.0.1:8001"
     env["RABBITMQ_USER"] = "test"
@@ -295,7 +296,8 @@ def resizer_process(backend_server, rabbitmq):
     repo_root = Path(__file__).resolve().parents[2]
 
     env = os.environ.copy()
-    env["RABBITMQ_HOST"] = rabbitmq["host"]
+    # env["RABBITMQ_HOST"] = rabbitmq["host"]
+    env["RABBITMQ_HOST"] = "127.0.0.1"
     env["IMAGE_RESIZE_QUEUE"] = env.get("IMAGE_RESIZE_QUEUE", "image_resize")
     env["BACKEND_BASE_URL"] = backend_server["base"]
     env["IMAGES_DIR"] = backend_server["images_dir"]  # MUST match backend
