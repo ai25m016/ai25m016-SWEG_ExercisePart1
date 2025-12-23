@@ -32,7 +32,7 @@ services:
       IMAGE_RESIZE_QUEUE: image_resize
       IMAGES_DIR: /app/backend/images
       SENTIMENT_SERVICE_URL: "http://sentiment-analysis:8001/predict"
-      # DISABLE_QUEUE: "true"        # optional explizit
+      DISABLE_QUEUE: "true"        # optional explizit
     ports:
       - "8000:8000"
     volumes:
