@@ -25,6 +25,8 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build & start services
+        env:
+          DISABLE_QUEUE: "true"
         run: |
           docker compose -f docker-compose.queue.local.yml up -d --build rabbitmq db backend image-resizer
           docker compose -f docker-compose.queue.local.yml ps
