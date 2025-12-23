@@ -5,46 +5,105 @@ import uuid
 try:
     import pika
 except ImportError:
-    pika = None 
+    pika = None
 
-# Queue Names
-RESIZE_QUEUE = os.getenv("IMAGE_RESIZE_QUEUE", "image_resize")
-SENTIMENT_RPC_QUEUE = "sentiment_rpc_queue" # Matches Sentiment Service
+
 RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "rabbitmq")
+RABBITMQ_USER = os.getenv("RABBITMQ_USER", "test")
+RABBITMQ_PASSWORD = os.getenv("RABBITMQ_PASSWORD", "test")
+
+IMAGE_RESIZE_QUEUE = os.getenv("IMAGE_RESIZE_QUEUE", "image_resize")
+TEXTGEN_QUEUE = os.getenv("TEXT_GENERATION_QUEUE", "text_generation")
+
+# RPC queue for sentiment service
+SENTIMENT_RPC_QUEUE = os.getenv("SENTIMENT_RPC_QUEUE", "sentiment_rpc_queue")
 
 
-# --- 1. EXISTING ASYNC FUNCTION (Keep this for Image Resize) ---
-def publish_image_resize(post_id: int, image: str) -> None:
-    if pika is None or os.getenv("DISABLE_QUEUE", "").lower() == "true": return
-    
-    creds = pika.PlainCredentials(os.getenv("RABBITMQ_USER", "test"), os.getenv("RABBITMQ_PASSWORD", "test"))
-    connection = pika.BlockingConnection(pika.ConnectionParameters(host=RABBITMQ_HOST, credentials=creds))
+def _disabled() -> bool:
+    return pika is None or os.getenv("DISABLE_QUEUE", "").lower() == "true"
+
+
+def _get_channel():
+    creds = pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASSWORD)
+    params = pika.ConnectionParameters(host=RABBITMQ_HOST, credentials=creds)
+    connection = pika.BlockingConnection(params)
     channel = connection.channel()
-    channel.queue_declare(queue=RESIZE_QUEUE, durable=True)
-    
-    body = json.dumps({"post_id": post_id, "image": image})
-    channel.basic_publish(exchange="", routing_key=RESIZE_QUEUE, body=body, properties=pika.BasicProperties(delivery_mode=2))
+    return connection, channel
+
+
+# ----------------------------
+# Async: Image Resize
+# ----------------------------
+def publish_image_resize(post_id: int, image: str) -> None:
+    if _disabled():
+        return
+
+    connection, channel = _get_channel()
+    channel.queue_declare(queue=IMAGE_RESIZE_QUEUE, durable=True)
+
+    body = json.dumps({"post_id": post_id, "image": image}).encode("utf-8")
+    channel.basic_publish(
+        exchange="",
+        routing_key=IMAGE_RESIZE_QUEUE,
+        body=body,
+        properties=pika.BasicProperties(delivery_mode=2),
+    )
     connection.close()
 
 
-# --- 2. NEW RPC FUNCTION (Synchronous Wait) ---
+# ----------------------------
+# Async: Text Generation Job
+# ----------------------------
+def publish_textgen_job(job_id: int, prompt: str, max_new_tokens: int = 60) -> None:
+    """
+    Pre-Post Kommentarvorschlag (TextGenJob).
+    """
+    if _disabled():
+        return
+
+    connection, channel = _get_channel()
+    channel.queue_declare(queue=TEXTGEN_QUEUE, durable=True)
+
+    body = json.dumps(
+        {
+            "type": "job",
+            "job_id": job_id,
+            "prompt": prompt,
+            "max_new_tokens": max_new_tokens,
+        }
+    ).encode("utf-8")
+
+    channel.basic_publish(
+        exchange="",
+        routing_key=TEXTGEN_QUEUE,
+        body=body,
+        properties=pika.BasicProperties(delivery_mode=2),
+    )
+    connection.close()
+
+
+# ----------------------------
+# RPC: Sentiment Check
+# ----------------------------
 class SentimentRpcClient:
     def __init__(self):
-        self.creds = pika.PlainCredentials(os.getenv("RABBITMQ_USER", "test"), os.getenv("RABBITMQ_PASSWORD", "test"))
-        self.connection = pika.BlockingConnection(pika.ConnectionParameters(host=RABBITMQ_HOST, credentials=self.creds))
+        creds = pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASSWORD)
+        params = pika.ConnectionParameters(host=RABBITMQ_HOST, credentials=creds)
+        self.connection = pika.BlockingConnection(params)
         self.channel = self.connection.channel()
 
-        # Create a temporary exclusive callback queue for the answer
-        result = self.channel.queue_declare(queue='', exclusive=True)
+        # exclusive callback queue for replies
+        result = self.channel.queue_declare(queue="", exclusive=True)
         self.callback_queue = result.method.queue
+
+        self.response = None
+        self.corr_id = None
 
         self.channel.basic_consume(
             queue=self.callback_queue,
             on_message_callback=self.on_response,
-            auto_ack=True
+            auto_ack=True,
         )
-        self.response = None
-        self.corr_id = None
 
     def on_response(self, ch, method, props, body):
         if self.corr_id == props.correlation_id:
@@ -53,32 +112,41 @@ class SentimentRpcClient:
     def call(self, text: str) -> str:
         self.response = None
         self.corr_id = str(uuid.uuid4())
-        
-        # Send text to Sentiment Service
+
+        payload = json.dumps({"text": text}).encode("utf-8")
+
         self.channel.basic_publish(
-            exchange='',
+            exchange="",
             routing_key=SENTIMENT_RPC_QUEUE,
             properties=pika.BasicProperties(
-                reply_to=self.callback_queue, # Tell them where to answer
+                reply_to=self.callback_queue,
                 correlation_id=self.corr_id,
+                delivery_mode=2,
             ),
-            body=json.dumps({"text": text}))
-            
-        # Wait specifically for the answer (Block until response)
+            body=payload,
+        )
+
+        # block until response arrives
         while self.response is None:
-            self.connection.process_data_events()
-            
-        return json.loads(self.response)["sentiment"]
+            self.connection.process_data_events(time_limit=1)
+
+        data = json.loads(self.response.decode("utf-8"))
+        return data.get("sentiment", "Neutral")
 
     def close(self):
         self.connection.close()
 
-# Helper function to use easily in API
+
 def check_sentiment_rpc(text: str) -> str:
-    if os.getenv("DISABLE_QUEUE", "").lower() == "true": return "Neutral"
+    """
+    Synchronous sentiment check via RabbitMQ RPC.
+    - If queues are disabled -> Neutral
+    """
+    if _disabled():
+        return "Neutral"
+
     client = SentimentRpcClient()
     try:
-        result = client.call(text)
-        return result
+        return client.call(text)
     finally:
         client.close()

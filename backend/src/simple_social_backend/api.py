@@ -1,25 +1,25 @@
-import requests
-from .events import publish_image_resize, check_sentiment_rpc
-
-from contextlib import asynccontextmanager
-from datetime import datetime, timezone
-from typing import List
+from __future__ import annotations
 
 import os
+from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import List
 
+import requests
 from dotenv import load_dotenv, find_dotenv
-
-# Lädt automatisch die Repo-Root .env (ohne dass du --env-file oder $env:... setzen musst)
-# Überschreibt vorhandene Environment-Variablen NICHT (override=False ist Default).
-load_dotenv(find_dotenv())
-
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-# from .events import publish_image_resize  # oder .eventy, wenn du den Namen nicht änderst
+# Events: Textgen + Resize immer, Sentiment-RPC optional (Fallback, falls Branches nicht synchron sind)
+try:
+    from .events import publish_image_resize, publish_textgen_job, check_sentiment_rpc
+except ImportError:
+    from .events import publish_image_resize, publish_textgen_job
+    check_sentiment_rpc = None
+
 from .db import (
     init_db,
     add_post,
@@ -29,7 +29,12 @@ from .db import (
     search_posts,
     delete_post as delete_post_from_db,
     set_post_thumbnail,
+    create_textgen_job,
+    get_textgen_job,
+    set_textgen_job_result,
 )
+
+load_dotenv(find_dotenv())
 
 
 class PostOut(BaseModel):
@@ -41,16 +46,34 @@ class PostOut(BaseModel):
     created_at: datetime
 
 
+class TextGenSuggestRequest(BaseModel):
+    prompt: str
+    max_new_tokens: int = 60
+
+
+class TextGenJobOut(BaseModel):
+    id: int
+    prompt: str
+    max_new_tokens: int
+    status: str
+    generated_text: str | None = None
+    error: str | None = None
+
+
+class TextGenJobResultIn(BaseModel):
+    status: str  # done | error
+    generated_text: str | None = None
+    error: str | None = None
+
+
 class ThumbnailIn(BaseModel):
     image_small: str
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
     init_db()
     yield
-    # Shutdown (optional)
 
 
 app = FastAPI(
@@ -59,27 +82,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Bilder-Verzeichnis: stabil, egal ob du aus Repo-Root oder aus backend/ startest
-IMAGES_DIR = Path(
-    os.getenv(
-        "IMAGES_DIR",
-        # Default: <repo>/backend/images
-        Path(__file__).resolve().parents[2] / "images",
-    )
-).resolve()
-
-# Bilder statisch ausliefern (URLs bleiben /images/...
-app.mount(
-    "/images",
-    StaticFiles(directory=str(IMAGES_DIR), check_dir=False),
-    name="images",
-)
+DEFAULT_IMAGES = (Path(__file__).resolve().parents[3] / "images")
+IMAGES_DIR = Path(os.getenv("IMAGES_DIR", str(DEFAULT_IMAGES))).resolve()
+app.mount("/images", StaticFiles(directory=str(IMAGES_DIR), check_dir=False), name="images")
 
 origins = [
     "http://127.0.0.1:5500",
     "http://localhost:5500",
 ]
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -88,9 +98,53 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Define the URL for the sentiment service (docker container name)
-# SENTIMENT_SERVICE_URL = os.getenv("SENTIMENT_SERVICE_URL", "http://sentiment-analysis:8001/predict")
+# HTTP Fallback Sentiment-Service (wenn RPC nicht verfügbar / down ist)
+SENTIMENT_SERVICE_URL = os.getenv("SENTIMENT_SERVICE_URL", "http://sentiment-analysis:8001/predict")
 
+
+# ----------------------------
+# TextGenJob endpoints
+# ----------------------------
+@app.post("/textgen/jobs", response_model=TextGenJobOut)
+def start_textgen_job(payload: TextGenSuggestRequest):
+    prompt = payload.prompt.strip()
+    if not prompt:
+        raise HTTPException(status_code=400, detail="prompt is empty")
+
+    job = create_textgen_job(prompt=prompt, max_new_tokens=payload.max_new_tokens)
+    try:
+        publish_textgen_job(job_id=job["id"], prompt=prompt, max_new_tokens=payload.max_new_tokens)
+    except Exception as exc:
+        set_textgen_job_result(job_id=job["id"], status="error", generated_text=None, error=str(exc))
+        raise
+
+    return job
+
+
+@app.get("/textgen/jobs/{job_id}", response_model=TextGenJobOut)
+def read_textgen_job(job_id: int):
+    job = get_textgen_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="job not found")
+    return job
+
+
+@app.put("/textgen/jobs/{job_id}", response_model=TextGenJobOut)
+def update_textgen_job(job_id: int, payload: TextGenJobResultIn):
+    updated = set_textgen_job_result(
+        job_id=job_id,
+        status=payload.status,
+        generated_text=payload.generated_text,
+        error=payload.error,
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="job not found")
+    return updated
+
+
+# ----------------------------
+# Posts
+# ----------------------------
 @app.post("/posts", response_model=PostOut, summary="Create a new post")
 async def create_post(
     image: UploadFile = File(...),
@@ -98,35 +152,37 @@ async def create_post(
     user: str = Form(...),
 ):
     """
-    Create Post Flow:
-    1. Check Sentiment (RPC via RabbitMQ) -> Fail if Negative
-    2. Save Image & DB
-    3. Trigger Resize (Async via RabbitMQ)
+    Flow:
+    1) Sentiment-Check: bevorzugt RPC (RabbitMQ), Fallback HTTP
+    2) Save Image & DB
+    3) Trigger Resize async (RabbitMQ)
     """
 
-    # --- 1. GATEKEEPER (RPC CHECK) ---
-    print(f"Checking sentiment for: {text}")
-    try:
-        sentiment = check_sentiment_rpc(text) # This WAITS for the AI
-        print(f"Sentiment Result: {sentiment}")
-        
-        if sentiment == "Negative":
-            raise HTTPException(
-                status_code=400, 
-                detail="Comment rejected. Only Positive/Neutral vibes allowed!"
-            )
-            
-    except Exception as e:
-        # If it's the HTTPException we just raised, pass it through
-        if isinstance(e, HTTPException): raise e
-        # If RabbitMQ fails, we decide: fail safe?
-        print(f"Sentiment Check Failed: {e}")
-        # pass # Uncomment to allow posts even if AI is down
+    sentiment = None
 
-    # --- 2. SAVE IMAGE & DB (Only if passed above) ---
+    # 1a) RPC bevorzugt, wenn verfügbar
+    if check_sentiment_rpc is not None:
+        try:
+            sentiment = check_sentiment_rpc(text)  # wartet auf Worker-Antwort
+        except Exception:
+            sentiment = None  # fail-open (wie vorher)
+
+    # 1b) HTTP Fallback, wenn RPC nicht ging
+    if sentiment is None:
+        try:
+            response = requests.post(SENTIMENT_SERVICE_URL, json={"text": text}, timeout=5.0)
+            response.raise_for_status()
+            sentiment = response.json().get("sentiment")
+        except requests.RequestException:
+            sentiment = None  # fail-open
+
+    if sentiment == "Negative":
+        raise HTTPException(status_code=400, detail="Negative comment not allowed")
+
+    # 2) Save Image
     base_dir = IMAGES_DIR / "original"
     base_dir.mkdir(parents=True, exist_ok=True)
-    
+
     suffix = Path(image.filename).suffix or ".jpg"
     timestamp = int(datetime.now(timezone.utc).timestamp())
     filename = f"{timestamp}_{user}{suffix}"
@@ -137,17 +193,23 @@ async def create_post(
         f.write(content)
 
     image_url = f"/images/original/{filename}"
-    
+
+    # 2) Save DB
     post_id = add_post(image=str(image_url), text=text, user=user)
     created = get_post_by_id(post_id)
+    if not created:
+        raise HTTPException(status_code=500, detail="Post could not be created")
 
-    # --- 3. TRIGGER RESIZE (ASYNC) ---
-    # We use the OLD function again because now the Sentiment logic is handled separately!
-    publish_image_resize(post_id, created["image"])
+    # 3) Trigger Resize async
+    try:
+        publish_image_resize(post_id, created["image"])
+    except Exception:
+        pass
 
     return created
 
-@app.get("/posts/latest", response_model=PostOut, summary="Get the latest post")
+
+@app.get("/posts/latest", response_model=PostOut)
 def latest_post():
     post = get_latest_post()
     if not post:
@@ -155,21 +217,17 @@ def latest_post():
     return post
 
 
-@app.get("/posts", response_model=list[PostOut], summary="List posts")
+@app.get("/posts", response_model=list[PostOut])
 def list_posts(user: str | None = None):
     return get_all_posts(user=user)
 
 
-@app.get(
-    "/posts/search",
-    response_model=list[PostOut],
-    summary="Search posts by text",
-)
+@app.get("/posts/search", response_model=list[PostOut])
 def search(query: str):
     return search_posts(query=query)
 
 
-@app.get("/posts/{post_id}", response_model=PostOut, summary="Get post by ID")
+@app.get("/posts/{post_id}", response_model=PostOut)
 def get_post(post_id: int):
     post = get_post_by_id(post_id)
     if not post:
@@ -177,11 +235,7 @@ def get_post(post_id: int):
     return post
 
 
-@app.put(
-    "/posts/{post_id}/thumbnail",
-    response_model=PostOut,
-    summary="Set thumbnail image for a post",
-)
+@app.put("/posts/{post_id}/thumbnail", response_model=PostOut)
 def update_thumbnail(post_id: int, payload: ThumbnailIn):
     updated = set_post_thumbnail(post_id, payload.image_small)
     if not updated:
@@ -189,20 +243,12 @@ def update_thumbnail(post_id: int, payload: ThumbnailIn):
     return updated
 
 
-@app.get(
-    "/users/{user}/posts",
-    response_model=List[PostOut],
-    summary="List posts by user",
-)
+@app.get("/users/{user}/posts", response_model=List[PostOut])
 def list_user_posts(user: str):
     return get_all_posts(user=user)
 
 
-@app.delete(
-    "/posts/{post_id}",
-    status_code=204,
-    summary="Delete post by ID",
-)
+@app.delete("/posts/{post_id}", status_code=204)
 def delete_post(post_id: int):
     deleted = delete_post_from_db(post_id)
     if not deleted:
