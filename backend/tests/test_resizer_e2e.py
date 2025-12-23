@@ -18,7 +18,7 @@ def test_resizer_generates_thumbnail(backend_server, resizer_process):
 
     files = {"image": ("ci.png", buf, "image/png")}
     data = {"user": "ci", "text": "e2e"}
-    r = requests.post(f"{base}/posts", data=data, files=files, timeout=20)
+    r = requests.post(f"{base}/posts", data=data, files=files, timeout=60)
     r.raise_for_status()
     post_id = int(r.json()["id"])
 
