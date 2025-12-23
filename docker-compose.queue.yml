@@ -26,13 +26,16 @@ services:
       - .env
     environment:
       DATABASE_URL: ${DATABASE_URL_LOCAL}
-      RABBITMQ_HOST: rabbitmq          # Name des Services unten
-      IMAGE_RESIZE_QUEUE: image_resize # passt zu deinem events.py
-      # DISABLE_QUEUE: "false"        # optional explizit
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: test
+      RABBITMQ_PASSWORD: test
+      IMAGE_RESIZE_QUEUE: image_resize
+      TEXT_GENERATION_QUEUE: text_generation
+      SENTIMENT_SERVICE_URL: "http://sentiment-analysis:8001/predict"
+      # DISABLE_QUEUE: "false"
     ports:
       - "8000:8000"
     volumes:
-      # gemeinsames Volume für Bilder (FastAPI speichert unter /app/images)
       - images_data:/app/backend/images
 
   frontend:
@@ -52,8 +55,8 @@ services:
     container_name: simple-social-rabbitmq
     restart: always
     ports:
-      - "5672:5672"   # AMQP (für pika)
-      - "15672:15672" # Web-UI zum Debuggen (http://localhost:15672)
+      - "5672:5672"
+      - "15672:15672"
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 5s
@@ -65,7 +68,7 @@ services:
 
   image-resizer:
     build:
-      context: ./image_resizer    # <--- hier kommt euer Resizer-Code hin
+      context: ./image_resizer
       dockerfile: Dockerfile
     image: ghcr.io/ai25m016/simple-social-image-resizer:${IMAGE_RESIZER_TAG:-latest}
     container_name: simple-social-image-resizer
@@ -77,12 +80,43 @@ services:
         condition: service_started
     environment:
       RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: test
+      RABBITMQ_PASSWORD: test
       IMAGE_RESIZE_QUEUE: image_resize
       BACKEND_BASE_URL: http://backend:8000
       IMAGES_DIR: /app/backend/images
     volumes:
-      # selbes Volume wie Backend → beide sehen die gleichen Bilddateien
       - images_data:/app/backend/images
+
+  ml-worker:
+    build:
+      context: ./ml_worker
+      dockerfile: Dockerfile
+    image: ghcr.io/ai25m016/simple-social-ml-worker:${ML_WORKER_TAG:-latest}
+    container_name: simple-social-ml-worker
+    restart: always
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: test
+      RABBITMQ_PASSWORD: test
+      TEXT_GENERATION_QUEUE: text_generation
+      BACKEND_BASE_URL: http://backend:8000
+      TEXTGEN_MODEL: sshleifer/tiny-gpt2
+
+  sentiment-analysis:
+    build:
+      context: ./sentiment_analysis
+      dockerfile: Dockerfile
+    image: ghcr.io/ai25m016/simple-social-sentiment:${SENTIMENT_TAG:-latest}
+    container_name: simple-social-sentiment
+    restart: always
+    ports:
+      - "8001:8001"
 
 volumes:
   social_db_data_local:

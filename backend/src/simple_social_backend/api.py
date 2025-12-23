@@ -1,24 +1,19 @@
-import requests
-
-from contextlib import asynccontextmanager
-from datetime import datetime, timezone
-from typing import List
+from __future__ import annotations
 
 import os
+from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import List
 
+import requests
 from dotenv import load_dotenv, find_dotenv
-
-# Lädt automatisch die Repo-Root .env (ohne dass du --env-file oder $env:... setzen musst)
-# Überschreibt vorhandene Environment-Variablen NICHT (override=False ist Default).
-load_dotenv(find_dotenv())
-
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from .events import publish_image_resize  # oder .eventy, wenn du den Namen nicht änderst
+from .events import publish_image_resize, publish_textgen_job
 from .db import (
     init_db,
     add_post,
@@ -28,7 +23,12 @@ from .db import (
     search_posts,
     delete_post as delete_post_from_db,
     set_post_thumbnail,
+    create_textgen_job,
+    get_textgen_job,
+    set_textgen_job_result,
 )
+
+load_dotenv(find_dotenv())
 
 
 class PostOut(BaseModel):
@@ -40,16 +40,34 @@ class PostOut(BaseModel):
     created_at: datetime
 
 
+class TextGenSuggestRequest(BaseModel):
+    prompt: str
+    max_new_tokens: int = 60
+
+
+class TextGenJobOut(BaseModel):
+    id: int
+    prompt: str
+    max_new_tokens: int
+    status: str
+    generated_text: str | None = None
+    error: str | None = None
+
+
+class TextGenJobResultIn(BaseModel):
+    status: str  # done | error
+    generated_text: str | None = None
+    error: str | None = None
+
+
 class ThumbnailIn(BaseModel):
     image_small: str
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
     init_db()
     yield
-    # Shutdown (optional)
 
 
 app = FastAPI(
@@ -58,27 +76,16 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Bilder-Verzeichnis: stabil, egal ob du aus Repo-Root oder aus backend/ startest
-IMAGES_DIR = Path(
-    os.getenv(
-        "IMAGES_DIR",
-        # Default: <repo>/backend/images
-        Path(__file__).resolve().parents[2] / "images",
-    )
-).resolve()
+# Default: repo_root/images (wenn IMAGES_DIR nicht gesetzt ist)
+DEFAULT_IMAGES = (Path(__file__).resolve().parents[3] / "images")
+IMAGES_DIR = Path(os.getenv("IMAGES_DIR", str(DEFAULT_IMAGES))).resolve()
 
-# Bilder statisch ausliefern (URLs bleiben /images/...
-app.mount(
-    "/images",
-    StaticFiles(directory=str(IMAGES_DIR), check_dir=False),
-    name="images",
-)
+app.mount("/images", StaticFiles(directory=str(IMAGES_DIR), check_dir=False), name="images")
 
 origins = [
     "http://127.0.0.1:5500",
     "http://localhost:5500",
 ]
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -87,88 +94,96 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Define the URL for the sentiment service (docker container name)
 SENTIMENT_SERVICE_URL = os.getenv("SENTIMENT_SERVICE_URL", "http://sentiment-analysis:8001/predict")
 
+
+# ----------------------------
+# TextGenJob endpoints
+# ----------------------------
+@app.post("/textgen/jobs", response_model=TextGenJobOut)
+def start_textgen_job(payload: TextGenSuggestRequest):
+    prompt = payload.prompt.strip()
+    if not prompt:
+        raise HTTPException(status_code=400, detail="prompt is empty")
+
+    job = create_textgen_job(prompt=prompt, max_new_tokens=payload.max_new_tokens)
+    try:
+        publish_textgen_job(job_id=job["id"], prompt=prompt, max_new_tokens=payload.max_new_tokens)
+    except Exception as exc:
+        set_textgen_job_result(job_id=job["id"], status="error", generated_text=None, error=str(exc))
+        raise
+
+    return job
+
+
+@app.get("/textgen/jobs/{job_id}", response_model=TextGenJobOut)
+def read_textgen_job(job_id: int):
+    job = get_textgen_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="job not found")
+    return job
+
+
+@app.put("/textgen/jobs/{job_id}", response_model=TextGenJobOut)
+def update_textgen_job(job_id: int, payload: TextGenJobResultIn):
+    updated = set_textgen_job_result(
+        job_id=job_id,
+        status=payload.status,
+        generated_text=payload.generated_text,
+        error=payload.error,
+    )
+    if not updated:
+        raise HTTPException(status_code=404, detail="job not found")
+    return updated
+
+
+# ----------------------------
+# Posts
+# ----------------------------
 @app.post("/posts", response_model=PostOut, summary="Create a new post")
 async def create_post(
     image: UploadFile = File(...),
     text: str = Form(...),
     user: str = Form(...),
 ):
-    """
-    Einen neuen Post anlegen:
-    - Bild-Datei speichern
-    - Post in DB anlegen
-    - Event in Queue legen
-    """
-
-    # --- 1. SENTIMENT BEGIN ---
+    # sentiment check (optional)
     try:
-        # Send text to the microservice
-        response = requests.post(
-            SENTIMENT_SERVICE_URL, 
-            json={"text": text}, 
-            timeout=5.0
-        )
+        response = requests.post(SENTIMENT_SERVICE_URL, json={"text": text}, timeout=5.0)
         response.raise_for_status()
-        
-        result = response.json()
-        sentiment = result.get("sentiment")
-        
-        # GATEKEEPER LOGIC
+        sentiment = response.json().get("sentiment")
         if sentiment == "Negative":
-            raise HTTPException(
-                status_code=400, 
-                detail="Your comment was detected as Negative. We only allow Positive or Neutral vibes!"
-            )
-            
-    except requests.RequestException as e:
-        # Decide: Do you want to fail if AI is down? 
-        # Or allow it? Here we log and allow (fail-open) or error (fail-closed).
-        print(f"Sentiment Service Error: {e}")
-        # Option A: Fail if AI is down
-        # raise HTTPException(status_code=503, detail="Sentiment analysis unavailable")
-        
-        # Option B: Pass through if AI is down (safer for demo)
+            raise HTTPException(status_code=400, detail="Negative comment not allowed")
+    except requests.RequestException:
         pass
 
-    # --- 1. SENTIMENT END ---
-
-    # Bilder-Verzeichnis anlegen (z.B. <IMAGES_DIR>/original/)
     base_dir = IMAGES_DIR / "original"
     base_dir.mkdir(parents=True, exist_ok=True)
 
-    # Dateiname generieren (einfach, aber eindeutig genug für die Übung)
     suffix = Path(image.filename).suffix or ".jpg"
     timestamp = int(datetime.now(timezone.utc).timestamp())
     filename = f"{timestamp}_{user}{suffix}"
     file_path = base_dir / filename
 
-    # Datei speichern
     content = await image.read()
     with open(file_path, "wb") as f:
         f.write(content)
 
-    # URL/Pfad, den Frontend & Resizer verwenden
     image_url = f"/images/original/{filename}"
 
-    # In DB speichern
     post_id = add_post(image=str(image_url), text=text, user=user)
     created = get_post_by_id(post_id)
     if not created:
         raise HTTPException(status_code=500, detail="Post could not be created")
 
-    # Event für Image-Resizer verschicken (post_id + image)
     try:
         publish_image_resize(post_id, created["image"])
-    except Exception as exc:  # noqa: BLE001
-        print(f"Could not publish image resize event: {exc}")
+    except Exception:
+        pass
 
     return created
 
 
-@app.get("/posts/latest", response_model=PostOut, summary="Get the latest post")
+@app.get("/posts/latest", response_model=PostOut)
 def latest_post():
     post = get_latest_post()
     if not post:
@@ -176,21 +191,17 @@ def latest_post():
     return post
 
 
-@app.get("/posts", response_model=list[PostOut], summary="List posts")
+@app.get("/posts", response_model=list[PostOut])
 def list_posts(user: str | None = None):
     return get_all_posts(user=user)
 
 
-@app.get(
-    "/posts/search",
-    response_model=list[PostOut],
-    summary="Search posts by text",
-)
+@app.get("/posts/search", response_model=list[PostOut])
 def search(query: str):
     return search_posts(query=query)
 
 
-@app.get("/posts/{post_id}", response_model=PostOut, summary="Get post by ID")
+@app.get("/posts/{post_id}", response_model=PostOut)
 def get_post(post_id: int):
     post = get_post_by_id(post_id)
     if not post:
@@ -198,11 +209,7 @@ def get_post(post_id: int):
     return post
 
 
-@app.put(
-    "/posts/{post_id}/thumbnail",
-    response_model=PostOut,
-    summary="Set thumbnail image for a post",
-)
+@app.put("/posts/{post_id}/thumbnail", response_model=PostOut)
 def update_thumbnail(post_id: int, payload: ThumbnailIn):
     updated = set_post_thumbnail(post_id, payload.image_small)
     if not updated:
@@ -210,20 +217,12 @@ def update_thumbnail(post_id: int, payload: ThumbnailIn):
     return updated
 
 
-@app.get(
-    "/users/{user}/posts",
-    response_model=List[PostOut],
-    summary="List posts by user",
-)
+@app.get("/users/{user}/posts", response_model=List[PostOut])
 def list_user_posts(user: str):
     return get_all_posts(user=user)
 
 
-@app.delete(
-    "/posts/{post_id}",
-    status_code=204,
-    summary="Delete post by ID",
-)
+@app.delete("/posts/{post_id}", status_code=204)
 def delete_post(post_id: int):
     deleted = delete_post_from_db(post_id)
     if not deleted:
