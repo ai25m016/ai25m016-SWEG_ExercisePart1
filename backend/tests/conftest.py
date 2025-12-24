@@ -124,7 +124,6 @@ def backend_server(tmp_path, rabbitmq):
         return
 
     # --- INTERNAL BACKEND SETUP ---
-
     repo_root = Path(__file__).resolve().parents[2]
     backend_dir = repo_root / "backend"
 
@@ -133,40 +132,39 @@ def backend_server(tmp_path, rabbitmq):
     (images_dir / "thumbs").mkdir(parents=True, exist_ok=True)
 
     env = os.environ.copy()
-    
     if "DISABLE_QUEUE" in env:
         del env["DISABLE_QUEUE"]
 
     db_file = tmp_path / "test_social.db"
-    
     env["DB_PATH"] = str(db_file)
     
     # ---------------------------------------------------------
-    # FIX: Force IPv4, but get Port/Auth from fixture
+    # ROBUST NETWORK CONFIGURATION
     # ---------------------------------------------------------
-    
-    # 1. Force Host to 127.0.0.1 (Solves the localhost/IPv6 hang)
-    env["RABBITMQ_HOST"] = "127.0.0.1"
-    
-    # 2. Get the REAL port from the fixture (Solves the 5672 timeout)
-    # The fixture likely has keys like 'port' or 'amqp_port'
-    # We fallback to 5672 only if the fixture doesn't specify one.
-    rmq_port = rabbitmq.get("port", rabbitmq.get("amqp_port", "5672"))
-    env["RABBITMQ_PORT"] = str(rmq_port)
+    # 1. Gather correct connection details
+    rmq_host = "127.0.0.1"  # Force IPv4
+    rmq_port = str(rabbitmq.get("port", rabbitmq.get("amqp_port", "5672")))
+    rmq_user = rabbitmq.get("user", rabbitmq.get("username", "test"))
+    rmq_pass = rabbitmq.get("password", "test")
 
-    # 3. Get credentials from fixture (don't assume test/test)
-    # If the fixture has specific user/pass, use them. Otherwise default to 'guest'.
-    env["RABBITMQ_USER"] = rabbitmq.get("user", rabbitmq.get("username", "test"))
-    env["RABBITMQ_PASSWORD"] = rabbitmq.get("password", "test")
+    # 2. Set individual variables (for apps that use them)
+    env["RABBITMQ_HOST"] = rmq_host
+    env["RABBITMQ_PORT"] = rmq_port
+    env["RABBITMQ_USER"] = rmq_user
+    env["RABBITMQ_PASSWORD"] = rmq_pass
 
-    # Queue name defaults
+    # 3. Set URL variables (for apps that prefer a connection string)
+    # This prevents the backend from falling back to 'localhost' if it ignores individual vars.
+    amqp_url = f"amqp://{rmq_user}:{rmq_pass}@{rmq_host}:{rmq_port}/"
+    env["RABBITMQ_URL"] = amqp_url
+    env["BROKER_URL"] = amqp_url
+    env["CELERY_BROKER_URL"] = amqp_url
+
     env["IMAGE_RESIZE_QUEUE"] = env.get("IMAGE_RESIZE_QUEUE", "image_resize")
     env["BACKEND_BASE_URL"] = "http://127.0.0.1:8001"
-
     env["IMAGES_DIR"] = str(images_dir)
 
-    # Debug print to verify in logs
-    print(f"DEBUG: Backend Config -> Host: {env['RABBITMQ_HOST']}, Port: {env['RABBITMQ_PORT']}, User: {env['RABBITMQ_USER']}")
+    print(f"DEBUG: Backend Starting -> Connecting to {amqp_url}")
 
     # Start backend
     cmd = [sys.executable, "-m", "uvicorn", "simple_social_backend.api:app", "--host", "127.0.0.1", "--port", "8001"]
@@ -188,7 +186,6 @@ def backend_server(tmp_path, rabbitmq):
         wal = Path(str(db_file) + "-wal")
         shm = Path(str(db_file) + "-shm")
 
-        # cleanup...
         for f in [db_file, wal, shm]:
             for _ in range(30):
                 try:
