@@ -212,7 +212,7 @@ def backend_server(tmp_path, rabbitmq):
 def resizer_process(backend_server, rabbitmq):
     """
     Starts the resizer worker as a subprocess.
-    If it exits immediately -> fail with its logs.
+    If it exits immediately -> fail.
     """
     E2E_EXTERNAL = os.getenv("E2E_EXTERNAL") == "1"
     if E2E_EXTERNAL:
@@ -222,48 +222,31 @@ def resizer_process(backend_server, rabbitmq):
 
     env = os.environ.copy()
     
-    # --- [FIX START] Sync settings with Backend ---
-    
-    # 1. Force IPv4 to match Backend
+    # --- Sync settings with Backend ---
     env["RABBITMQ_HOST"] = "127.0.0.1"
-
-    # 2. Use the same dynamic Port as Backend
-    # (Defaults to 5672 if not provided by fixture)
+    
+    # Get Port/User/Pass from fixture
     rmq_port = rabbitmq.get("port", rabbitmq.get("amqp_port", "5672"))
     env["RABBITMQ_PORT"] = str(rmq_port)
-
-    # 3. Use the same dynamic Credentials as Backend
-    # (Fixes the 'test' vs 'guest' mismatch)
     env["RABBITMQ_USER"] = rabbitmq.get("user", rabbitmq.get("username", "guest"))
     env["RABBITMQ_PASSWORD"] = rabbitmq.get("password", "guest")
     
-    # --- [FIX END] ---
-
     env["IMAGE_RESIZE_QUEUE"] = env.get("IMAGE_RESIZE_QUEUE", "image_resize")
     env["BACKEND_BASE_URL"] = backend_server["base"]
-    env["IMAGES_DIR"] = backend_server["images_dir"]  # MUST match backend
+    env["IMAGES_DIR"] = backend_server["images_dir"]
     env["PYTHONUNBUFFERED"] = "1"
 
-    # Debug log to verify settings match backend
     print(f"DEBUG: Resizer Config -> Host: {env['RABBITMQ_HOST']}, Port: {env['RABBITMQ_PORT']}, User: {env['RABBITMQ_USER']}")
 
-    # default: use console-script
     cmd = ["social-resizer"]
 
-    # Use PIPE for stdout/stderr so we can read error logs if it dies
-    p = subprocess.Popen(cmd, cwd=str(repo_root), env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    # --- FIX: REMOVE 'stdout=PIPE' so logs appear in console ---
+    p = subprocess.Popen(cmd, cwd=str(repo_root), env=env)
 
-    # give it a moment; if it dies -> show output and fail
-    time.sleep(1.0)
+    # Check if it dies immediately
+    time.sleep(1.5)
     if p.poll() is not None:
-        out = ""
-        err = ""
-        try:
-            out = p.stdout.read().decode() if p.stdout else ""
-            err = p.stderr.read().decode() if p.stderr else ""
-        except Exception:
-            pass
-        raise RuntimeError(f"Resizer exited immediately.\n--- stdout ---\n{out}\n--- stderr ---\n{err}\n--------------")
+        raise RuntimeError("Resizer exited immediately. Check the console logs above for the error!")
 
     try:
         yield p
