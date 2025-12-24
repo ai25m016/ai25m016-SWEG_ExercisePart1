@@ -155,29 +155,32 @@ def backend_server(tmp_path, rabbitmq):
 
     print(f"DEBUG: Backend Starting -> Host: {env['RABBITMQ_HOST']}, User: {env['RABBITMQ_USER']}, Proxy Cleared")
 
-    # cmd = [sys.executable, "-m", "uvicorn", "simple_social_backend.api:app", "--host", "127.0.0.1", "--port", "8001"]
-    # In backend_server fixture:
-    cmd = [
-        sys.executable, "-m", "uvicorn", 
-        "simple_social_backend.api:app", 
-        "--host", "127.0.0.1", 
-        "--port", "8001",
-        "--loop", "asyncio"  # <--- ADD THIS
-    ]
+    cmd = [sys.executable, "-m", "uvicorn", "simple_social_backend.api:app", "--host", "127.0.0.1", "--port", "8001"]
     env["PYTHONUNBUFFERED"] = "1"
-    
-    p = subprocess.Popen(cmd, cwd=str(backend_dir), env=env)
+    # Capture stdout/stderr so we can print it on test failures
+    p = subprocess.Popen(cmd, cwd=str(backend_dir), env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 
     try:
         _wait_http("http://127.0.0.1:8001/posts", timeout_s=120)
         yield {"base": "http://127.0.0.1:8001", "images_dir": str(images_dir), "proc": p}
     finally:
+        # Terminate backend
         p.terminate()
         try:
             p.wait(timeout=10)
         except subprocess.TimeoutExpired:
             p.kill()
             p.wait(timeout=5)
+
+        # Read and print buffered output for diagnostics
+        try:
+            out = p.stdout.read() if p.stdout else ""
+            if out:
+                print("=== Backend stdout/stderr ===")
+                print(out)
+                print("=== End backend stdout/stderr ===")
+        except Exception:
+            pass
 
         # Cleanup Code (DB and Images)
         wal = Path(str(db_file) + "-wal")
