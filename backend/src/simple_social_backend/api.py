@@ -13,7 +13,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from .events import publish_image_resize, publish_textgen_job
+from fastapi.concurrency import run_in_threadpool
+# from .events import publish_image_resize, publish_textgen_job
+from .events import publish_image_resize, publish_textgen_job, check_sentiment_rpc
+
+# 2. ADD check_sentiment_rpc TO IMPORTS
+# try:
+#     from .events import publish_image_resize, publish_textgen_job, check_sentiment_rpc
+# except ImportError:
+#     from .events import publish_image_resize, publish_textgen_job
+#     check_sentiment_rpc = None
+
 from .db import (
     init_db,
     add_post,
@@ -96,7 +106,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-SENTIMENT_SERVICE_URL = os.getenv("SENTIMENT_SERVICE_URL", "http://sentiment-analysis:8001/predict")
+# SENTIMENT_SERVICE_URL = os.getenv("SENTIMENT_SERVICE_URL", "http://sentiment-analysis:8001/predict")
 
 
 # ----------------------------
@@ -148,18 +158,50 @@ async def create_post(
     text: str = Form(...),
     user: str = Form(...),
 ):
-    # sentiment check (optional) — use async client to avoid blocking the event loop
-    try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(SENTIMENT_SERVICE_URL, json={"text": text}, timeout=5.0)
-            response.raise_for_status()
-            sentiment = response.json().get("sentiment")
-            if sentiment == "Negative":
-                raise HTTPException(status_code=400, detail="Negative comment not allowed")
-    except Exception:
-        # swallow network errors / unreachability — sentiment is optional in tests
-        pass
+    """
+    Flow:
+    1) Sentiment-Check: Preferred RPC (RabbitMQ), Fallback HTTP
+    2) Save Image & DB
+    3) Trigger Resize async (RabbitMQ)
+    """
+    # sentiment = None
 
+    # --- 1. SENTIMENT CHECK (RabbitMQ RPC Only) ---
+    # if check_sentiment_rpc is not None:
+    #     try:
+    #         # We use run_in_threadpool to prevent the Python 3.12 Deadlock
+    #         sentiment = await run_in_threadpool(check_sentiment_rpc, text)
+    #         print(f"DEBUG: Sentiment RPC returned: {sentiment}")
+    #     except Exception as e:
+    #         # Now you will see this error in your local console if RabbitMQ fails
+    #         print(f"ERROR: Sentiment RPC failed: {e}")
+    #         sentiment = None
+
+    # # 3. Enforce Sentiment Logic
+    # if sentiment == "Negative":
+    #     raise HTTPException(status_code=400, detail="Negative comment not allowed")
+
+    # --- 1. GATEKEEPER (RPC CHECK) ---
+    print(f"Checking sentiment for: {text}")
+    try:
+        # sentiment = check_sentiment_rpc(text) # This WAITS for the AI
+        sentiment = await run_in_threadpool(check_sentiment_rpc, text)
+        print(f"Sentiment Result: {sentiment}")
+        
+        if sentiment == "Negative":
+            raise HTTPException(
+                status_code=400, 
+                detail="Comment rejected. Only Positive/Neutral vibes allowed!"
+            )
+            
+    except Exception as e:
+        # If it's the HTTPException we just raised, pass it through
+        if isinstance(e, HTTPException): raise e
+        # If RabbitMQ fails, we decide: fail safe?
+        print(f"Sentiment Check Failed: {e}")
+        # pass # Uncomment to allow posts even if AI is down
+
+    # 4. Save Image to Disk
     base_dir = IMAGES_DIR / "original"
     base_dir.mkdir(parents=True, exist_ok=True)
 
@@ -174,22 +216,21 @@ async def create_post(
 
     image_url = f"/images/original/{filename}"
 
+    # 5. Save Post to Database
     post_id = add_post(image=str(image_url), text=text, user=user)
     created = get_post_by_id(post_id)
     if not created:
         raise HTTPException(status_code=500, detail="Post could not be created")
 
-    # Always schedule queue-publish without blocking the request handler.
-    # publish_image_resize itself starts a background thread, but ensure we do not block:
+    # 6. Trigger Image Resize (Async Background Task)
+    # We use asyncio.to_thread to run the blocking Pika publish function safely
+    # and create_task to ensure the API responds immediately without waiting.
     try:
-        # schedule in threadpool to be extra-safe (do not await)
         asyncio.create_task(asyncio.to_thread(publish_image_resize, post_id, created["image"]))
     except Exception:
-        # swallow publish scheduling errors
         pass
 
     return created
-
 
 @app.get("/posts/latest", response_model=PostOut)
 def latest_post():

@@ -19,6 +19,13 @@ TEXTGEN_QUEUE = os.getenv("TEXT_GENERATION_QUEUE", "text_generation")
 # RPC queue for sentiment service
 SENTIMENT_RPC_QUEUE = os.getenv("SENTIMENT_RPC_QUEUE", "sentiment_rpc_queue")
 
+# ---------------------------------------------------------
+# MISSING FUNCTION - ADD THIS!
+# ---------------------------------------------------------
+def _disabled() -> bool:
+    """Check if queues are disabled via environment variable."""
+    return pika is None or os.getenv("DISABLE_QUEUE", "").lower() == "true"
+
 def _get_channel():
     """
     Create a pika connection/channel with short timeouts so it does not block callers indefinitely.
