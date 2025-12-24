@@ -132,6 +132,8 @@ def backend_server(tmp_path, rabbitmq):
     (images_dir / "thumbs").mkdir(parents=True, exist_ok=True)
 
     env = os.environ.copy()
+    
+    # Enable the queue logic
     if "DISABLE_QUEUE" in env:
         del env["DISABLE_QUEUE"]
 
@@ -139,32 +141,32 @@ def backend_server(tmp_path, rabbitmq):
     env["DB_PATH"] = str(db_file)
     
     # ---------------------------------------------------------
-    # ROBUST NETWORK CONFIGURATION
+    # CLEAN NETWORK CONFIGURATION (Matching Resizer)
     # ---------------------------------------------------------
-    # 1. Gather correct connection details
-    rmq_host = "127.0.0.1"  # Force IPv4
-    rmq_port = str(rabbitmq.get("port", rabbitmq.get("amqp_port", "5672")))
-    rmq_user = rabbitmq.get("user", rabbitmq.get("username", "test"))
-    rmq_pass = rabbitmq.get("password", "test")
+    # 1. Force Host to 127.0.0.1 (IPv4)
+    env["RABBITMQ_HOST"] = "127.0.0.1"
+    
+    # 2. Dynamic Port (from fixture)
+    rmq_port = rabbitmq.get("port", rabbitmq.get("amqp_port", "5672"))
+    env["RABBITMQ_PORT"] = str(rmq_port)
 
-    # 2. Set individual variables (for apps that use them)
-    env["RABBITMQ_HOST"] = rmq_host
-    env["RABBITMQ_PORT"] = rmq_port
-    env["RABBITMQ_USER"] = rmq_user
-    env["RABBITMQ_PASSWORD"] = rmq_pass
+    # 3. Dynamic User/Pass (from fixture, usually 'test'/'test')
+    env["RABBITMQ_USER"] = rabbitmq.get("user", rabbitmq.get("username", "test"))
+    env["RABBITMQ_PASSWORD"] = rabbitmq.get("password", "test")
 
-    # 3. Set URL variables (for apps that prefer a connection string)
-    # This prevents the backend from falling back to 'localhost' if it ignores individual vars.
-    amqp_url = f"amqp://{rmq_user}:{rmq_pass}@{rmq_host}:{rmq_port}/"
-    env["RABBITMQ_URL"] = amqp_url
-    env["BROKER_URL"] = amqp_url
-    env["CELERY_BROKER_URL"] = amqp_url
-
+    # 4. REMOVE URL variables to prevent conflicts/formatting errors
+    # We rely on the app reading the HOST/PORT/USER/PASS variables above.
+    if "RABBITMQ_URL" in env:
+        del env["RABBITMQ_URL"]
+    if "BROKER_URL" in env:
+        del env["BROKER_URL"]
+        
     env["IMAGE_RESIZE_QUEUE"] = env.get("IMAGE_RESIZE_QUEUE", "image_resize")
     env["BACKEND_BASE_URL"] = "http://127.0.0.1:8001"
     env["IMAGES_DIR"] = str(images_dir)
 
-    print(f"DEBUG: Backend Starting -> Connecting to {amqp_url}")
+    # Debug print
+    print(f"DEBUG: Backend Starting -> Host: {env['RABBITMQ_HOST']}, Port: {env['RABBITMQ_PORT']}, User: {env['RABBITMQ_USER']}")
 
     # Start backend
     cmd = [sys.executable, "-m", "uvicorn", "simple_social_backend.api:app", "--host", "127.0.0.1", "--port", "8001"]
@@ -186,6 +188,7 @@ def backend_server(tmp_path, rabbitmq):
         wal = Path(str(db_file) + "-wal")
         shm = Path(str(db_file) + "-shm")
 
+        # DB cleanup
         for f in [db_file, wal, shm]:
             for _ in range(30):
                 try:
@@ -195,7 +198,8 @@ def backend_server(tmp_path, rabbitmq):
                     break
                 except PermissionError:
                     time.sleep(0.1)
-
+        
+        # Images cleanup
         for _ in range(30):
             try:
                 shutil.rmtree(images_dir)
