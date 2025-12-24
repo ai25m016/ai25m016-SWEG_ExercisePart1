@@ -156,8 +156,8 @@ def backend_server(tmp_path, rabbitmq):
 
     # 3. Get credentials from fixture (don't assume test/test)
     # If the fixture has specific user/pass, use them. Otherwise default to 'guest'.
-    env["RABBITMQ_USER"] = rabbitmq.get("user", rabbitmq.get("username", "guest"))
-    env["RABBITMQ_PASSWORD"] = rabbitmq.get("password", "guest")
+    env["RABBITMQ_USER"] = rabbitmq.get("user", rabbitmq.get("username", "test"))
+    env["RABBITMQ_PASSWORD"] = rabbitmq.get("password", "test")
 
     # Queue name defaults
     env["IMAGE_RESIZE_QUEUE"] = env.get("IMAGE_RESIZE_QUEUE", "image_resize")
@@ -228,8 +228,8 @@ def resizer_process(backend_server, rabbitmq):
     # Get Port/User/Pass from fixture
     rmq_port = rabbitmq.get("port", rabbitmq.get("amqp_port", "5672"))
     env["RABBITMQ_PORT"] = str(rmq_port)
-    env["RABBITMQ_USER"] = rabbitmq.get("user", rabbitmq.get("username", "guest"))
-    env["RABBITMQ_PASSWORD"] = rabbitmq.get("password", "guest")
+    env["RABBITMQ_USER"] = rabbitmq.get("user", rabbitmq.get("username", "test"))
+    env["RABBITMQ_PASSWORD"] = rabbitmq.get("password", "test")
     
     env["IMAGE_RESIZE_QUEUE"] = env.get("IMAGE_RESIZE_QUEUE", "image_resize")
     env["BACKEND_BASE_URL"] = backend_server["base"]
