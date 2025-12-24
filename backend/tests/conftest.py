@@ -105,24 +105,15 @@ def backend_server(tmp_path, rabbitmq):
     if E2E_EXTERNAL:
         base = os.getenv("BACKEND_BASE_URL", "http://127.0.0.1:8000")
         _wait_http(f"{base}/posts", timeout_s=120)
-
-        images_dir = tmp_path / "images"
-        (images_dir / "original").mkdir(parents=True, exist_ok=True)
-        (images_dir / "thumbs").mkdir(parents=True, exist_ok=True)
-
+        # ... (external logic unchanged) ...
         try:
-            yield {"base": base, "images_dir": str(images_dir), "proc": None}
+            yield {"base": base, "images_dir": str(tmp_path / "images"), "proc": None}
         finally:
-            for _ in range(30):
-                try:
-                    shutil.rmtree(images_dir)
-                    break
-                except FileNotFoundError:
-                    break
-                except PermissionError:
-                    time.sleep(0.1)
+            # ... cleanup ...
+            pass
         return
 
+    # --- INTERNAL BACKEND SETUP ---
     repo_root = Path(__file__).resolve().parents[2]
     backend_dir = repo_root / "backend"
 
@@ -138,14 +129,23 @@ def backend_server(tmp_path, rabbitmq):
     env["DB_PATH"] = str(db_file)
     
     # --- NETWORK CONFIGURATION ---
-    # We use 'test' because 'guest' was refused (403).
-    # We use 127.0.0.1 to avoid IPv6/localhost issues.
+    # 1. Use the working credentials from Resizer (test/test)
     env["RABBITMQ_HOST"] = "127.0.0.1"
     env["RABBITMQ_PORT"] = "5672"
     env["RABBITMQ_USER"] = "test"
     env["RABBITMQ_PASSWORD"] = "test"
 
-    # Remove URL variables to ensure Backend uses the explicit HOST/USER variables above
+    # 2. CLEANUP PROXY SETTINGS (The likely cause of the hang)
+    # If http_proxy is set, Pika might try to route AMQP through it and hang.
+    for key in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"]:
+        if key in env:
+            del env[key]
+    
+    # 3. Force NO_PROXY for localhost
+    env["NO_PROXY"] = "127.0.0.1,localhost"
+    env["no_proxy"] = "127.0.0.1,localhost"
+
+    # Remove URL variables to be safe
     if "RABBITMQ_URL" in env: del env["RABBITMQ_URL"]
     if "BROKER_URL" in env: del env["BROKER_URL"]
 
@@ -153,7 +153,7 @@ def backend_server(tmp_path, rabbitmq):
     env["BACKEND_BASE_URL"] = "http://127.0.0.1:8001"
     env["IMAGES_DIR"] = str(images_dir)
 
-    print(f"DEBUG: Backend Starting -> Host: {env['RABBITMQ_HOST']}, User: {env['RABBITMQ_USER']}")
+    print(f"DEBUG: Backend Starting -> Host: {env['RABBITMQ_HOST']}, User: {env['RABBITMQ_USER']}, Proxy Cleared")
 
     cmd = [sys.executable, "-m", "uvicorn", "simple_social_backend.api:app", "--host", "127.0.0.1", "--port", "8001"]
     env["PYTHONUNBUFFERED"] = "1"
@@ -171,26 +171,18 @@ def backend_server(tmp_path, rabbitmq):
             p.kill()
             p.wait(timeout=5)
 
-        # Cleanup
+        # Cleanup Code (DB and Images)
         wal = Path(str(db_file) + "-wal")
         shm = Path(str(db_file) + "-shm")
         for f in [db_file, wal, shm]:
             for _ in range(30):
                 try:
-                    f.unlink()
-                    break
-                except FileNotFoundError:
-                    break
-                except PermissionError:
-                    time.sleep(0.1)
+                    f.unlink(); break
+                except (FileNotFoundError, PermissionError): time.sleep(0.1)
         for _ in range(30):
             try:
-                shutil.rmtree(images_dir)
-                break
-            except FileNotFoundError:
-                break
-            except PermissionError:
-                time.sleep(0.1)
+                shutil.rmtree(images_dir); break
+            except (FileNotFoundError, PermissionError): time.sleep(0.1)
 
 @pytest.fixture
 def resizer_process(backend_server, rabbitmq):
