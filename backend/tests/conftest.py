@@ -10,12 +10,12 @@ import pytest
 import requests
 import pika
 
-@pytest.fixture(scope="session", autouse=True)
-def set_test_env():
-    # This disables actual RabbitMQ connections for ALL tests
-    os.environ["DISABLE_QUEUE"] = "true"
-    yield
-    del os.environ["DISABLE_QUEUE"]
+# @pytest.fixture(scope="session", autouse=True)
+# def set_test_env():
+#     # This disables actual RabbitMQ connections for ALL tests
+#     os.environ["DISABLE_QUEUE"] = "true"
+#     yield
+#     del os.environ["DISABLE_QUEUE"]
 
 def _wait_amqp_ready(host: str, user: str, pw: str, timeout_s: int = 120):
     end = time.time() + timeout_s
@@ -122,8 +122,8 @@ def backend_server(tmp_path, rabbitmq):
     (images_dir / "thumbs").mkdir(parents=True, exist_ok=True)
 
     env = os.environ.copy()
-    if "DISABLE_QUEUE" in env:
-        del env["DISABLE_QUEUE"]
+    # if "DISABLE_QUEUE" in env:
+    #     del env["DISABLE_QUEUE"]
 
     db_file = tmp_path / "test_social.db"
     env["DB_PATH"] = str(db_file)
@@ -198,8 +198,8 @@ def resizer_process(backend_server, rabbitmq):
     env = os.environ.copy()
 
     # --- FIX 1: Remove DISABLE_QUEUE for the Resizer too ---
-    if "DISABLE_QUEUE" in env:
-        del env["DISABLE_QUEUE"]
+    # if "DISABLE_QUEUE" in env:
+    #     del env["DISABLE_QUEUE"]
 
     # --- FIX 2: Cleanup Proxy Settings (Same as Backend) ---
     for key in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"]:
