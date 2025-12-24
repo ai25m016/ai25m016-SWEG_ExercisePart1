@@ -23,13 +23,25 @@ def _disabled() -> bool:
     return pika is None or os.getenv("DISABLE_QUEUE", "").lower() == "true"
 
 
+# def _get_channel():
+#     creds = pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASSWORD)
+#     params = pika.ConnectionParameters(host=RABBITMQ_HOST, credentials=creds)
+#     connection = pika.BlockingConnection(params)
+#     channel = connection.channel()
+#     return connection, channel
+
 def _get_channel():
     creds = pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASSWORD)
-    params = pika.ConnectionParameters(host=RABBITMQ_HOST, credentials=creds)
+    params = pika.ConnectionParameters(
+        host=RABBITMQ_HOST, 
+        credentials=creds,
+        socket_timeout=5,      # <--- ADD THIS (Fail after 5s)
+        blocked_connection_timeout=5 # <--- ADD THIS
+    )
+    # The hang happens on this next line:
     connection = pika.BlockingConnection(params)
     channel = connection.channel()
     return connection, channel
-
 
 # ----------------------------
 # Async: Image Resize

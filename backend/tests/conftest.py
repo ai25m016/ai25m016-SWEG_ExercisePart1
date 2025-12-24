@@ -155,7 +155,15 @@ def backend_server(tmp_path, rabbitmq):
 
     print(f"DEBUG: Backend Starting -> Host: {env['RABBITMQ_HOST']}, User: {env['RABBITMQ_USER']}, Proxy Cleared")
 
-    cmd = [sys.executable, "-m", "uvicorn", "simple_social_backend.api:app", "--host", "127.0.0.1", "--port", "8001"]
+    # cmd = [sys.executable, "-m", "uvicorn", "simple_social_backend.api:app", "--host", "127.0.0.1", "--port", "8001"]
+    # In backend_server fixture:
+    cmd = [
+        sys.executable, "-m", "uvicorn", 
+        "simple_social_backend.api:app", 
+        "--host", "127.0.0.1", 
+        "--port", "8001",
+        "--loop", "asyncio"  # <--- ADD THIS
+    ]
     env["PYTHONUNBUFFERED"] = "1"
     
     p = subprocess.Popen(cmd, cwd=str(backend_dir), env=env)
