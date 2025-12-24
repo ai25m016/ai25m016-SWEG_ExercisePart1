@@ -1,6 +1,7 @@
 import json
 import os
 import uuid
+from threading import Thread
 
 try:
     import pika
@@ -18,17 +19,13 @@ TEXTGEN_QUEUE = os.getenv("TEXT_GENERATION_QUEUE", "text_generation")
 # RPC queue for sentiment service
 SENTIMENT_RPC_QUEUE = os.getenv("SENTIMENT_RPC_QUEUE", "sentiment_rpc_queue")
 
-
-def _disabled() -> bool:
-    return pika is None or os.getenv("DISABLE_QUEUE", "").lower() == "true"
-
 def _get_channel():
     """
-    Create a pika connection/channel with short timeouts so it does not block the web request indefinitely.
+    Create a pika connection/channel with short timeouts so it does not block callers indefinitely.
     """
     creds = pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASSWORD)
 
-    # socket_timeout makes connect/read fail fast; connection_attempts=1 avoids long retry loops
+    # Use short timeouts and single connection attempt to avoid long blocking behaviours
     params = pika.ConnectionParameters(
         host=RABBITMQ_HOST,
         credentials=creds,
@@ -42,10 +39,10 @@ def _get_channel():
     channel = connection.channel()
     return connection, channel
 
+
 def _do_publish_image_resize(post_id: int, image: str) -> None:
     """
-    Actually perform the publish. Runs in a background thread and swallows exceptions
-    so the web request is not affected.
+    Actually perform publishing. Runs in a background thread and swallows/logs exceptions.
     """
     if pika is None or os.getenv("DISABLE_QUEUE", "").lower() == "true":
         return
@@ -67,12 +64,9 @@ def _do_publish_image_resize(post_id: int, image: str) -> None:
             except Exception:
                 pass
     except Exception as exc:
-        # log the failure (print is fine for tests/CI), but do not raise
+        # Print is fine for CI; replace with proper logger in real deployments
         print(f"[events] publish_image_resize failed (post_id={post_id}): {exc}")
 
-# ----------------------------
-# Async: Image Resize
-# ----------------------------
 
 def publish_image_resize(post_id: int, image: str) -> None:
     """
@@ -81,40 +75,45 @@ def publish_image_resize(post_id: int, image: str) -> None:
     if pika is None or os.getenv("DISABLE_QUEUE", "").lower() == "true":
         return
 
-    # fire-and-forget: background thread will attempt the publish and log errors
     t = Thread(target=_do_publish_image_resize, args=(post_id, image), daemon=True)
     t.start()
 
-# ----------------------------
-# Async: Text Generation Job
-# ----------------------------
+
 def publish_textgen_job(job_id: int, prompt: str, max_new_tokens: int = 60) -> None:
     """
-    Pre-Post Kommentarvorschlag (TextGenJob).
+    Publish a textgen job to the TEXTGEN_QUEUE. This implementation is intentionally
+    synchronous because callers expect the job to be enqueued quickly. However,
+    it respects DISABLE_QUEUE and will raise on obvious failures. Consider making
+    this background as well if you see blocking issues similar to image resize.
     """
-    if _disabled():
+    if pika is None or os.getenv("DISABLE_QUEUE", "").lower() == "true":
         return
 
-    connection, channel = _get_channel()
-    channel.queue_declare(queue=TEXTGEN_QUEUE, durable=True)
-
-    body = json.dumps(
-        {
-            "type": "job",
-            "job_id": job_id,
-            "prompt": prompt,
-            "max_new_tokens": max_new_tokens,
-        }
-    ).encode("utf-8")
-
-    channel.basic_publish(
-        exchange="",
-        routing_key=TEXTGEN_QUEUE,
-        body=body,
-        properties=pika.BasicProperties(delivery_mode=2),
-    )
-    connection.close()
-
+    try:
+        connection, channel = _get_channel()
+        try:
+            channel.queue_declare(queue=TEXTGEN_QUEUE, durable=True)
+            body = json.dumps({
+                "type": "job",
+                "job_id": job_id,
+                "prompt": prompt,
+                "max_new_tokens": max_new_tokens,
+            })
+            channel.basic_publish(
+                exchange="",
+                routing_key=TEXTGEN_QUEUE,
+                body=body.encode("utf-8"),
+                properties=pika.BasicProperties(delivery_mode=2),
+            )
+        finally:
+            try:
+                connection.close()
+            except Exception:
+                pass
+    except Exception as exc:
+        # For textgen we preserve the previous behavior which will let the caller catch
+        # exceptions (the API code handles setting the job to error if publish fails).
+        raise
 
 # ----------------------------
 # RPC: Sentiment Check
