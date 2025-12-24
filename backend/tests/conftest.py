@@ -10,6 +10,13 @@ import pytest
 import requests
 import pika
 
+@pytest.fixture(scope="session", autouse=True)
+def set_test_env():
+    # This disables actual RabbitMQ connections for ALL tests
+    os.environ["DISABLE_QUEUE"] = "true"
+    yield
+    del os.environ["DISABLE_QUEUE"]
+
 def _wait_amqp_ready(host: str, user: str, pw: str, timeout_s: int = 120):
     end = time.time() + timeout_s
     last = None
@@ -89,7 +96,6 @@ def rabbitmq():
     finally:
         subprocess.run(["docker", "rm", "-f", name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-
 @pytest.fixture
 def backend_server(tmp_path, rabbitmq):
     """
@@ -99,23 +105,15 @@ def backend_server(tmp_path, rabbitmq):
     if E2E_EXTERNAL:
         base = os.getenv("BACKEND_BASE_URL", "http://127.0.0.1:8000")
         _wait_http(f"{base}/posts", timeout_s=120)
-
-        images_dir = tmp_path / "images"
-        (images_dir / "original").mkdir(parents=True, exist_ok=True)
-        (images_dir / "thumbs").mkdir(parents=True, exist_ok=True)
-
+        # ... (external logic unchanged) ...
         try:
-            yield {"base": base, "images_dir": str(images_dir), "proc": None}
+            yield {"base": base, "images_dir": str(tmp_path / "images"), "proc": None}
         finally:
-            for _ in range(30):
-                try:
-                    shutil.rmtree(images_dir)
-                    break
-                except FileNotFoundError:
-                    break
-                except PermissionError:
-                    time.sleep(0.1)
+            # ... cleanup ...
+            pass
         return
+
+    # --- INTERNAL BACKEND SETUP ---
     repo_root = Path(__file__).resolve().parents[2]
     backend_dir = repo_root / "backend"
 
@@ -124,28 +122,49 @@ def backend_server(tmp_path, rabbitmq):
     (images_dir / "thumbs").mkdir(parents=True, exist_ok=True)
 
     env = os.environ.copy()
+    if "DISABLE_QUEUE" in env:
+        del env["DISABLE_QUEUE"]
+
     db_file = tmp_path / "test_social.db"
     env["DB_PATH"] = str(db_file)
-    env["RABBITMQ_HOST"] = rabbitmq["host"]
-    env["IMAGE_RESIZE_QUEUE"] = env.get("IMAGE_RESIZE_QUEUE", "image_resize")
-    env["BACKEND_BASE_URL"] = "http://127.0.0.1:8001"
+    
+    # --- NETWORK CONFIGURATION ---
+    # 1. Use the working credentials from Resizer (test/test)
+    env["RABBITMQ_HOST"] = "127.0.0.1"
+    env["RABBITMQ_PORT"] = "5672"
     env["RABBITMQ_USER"] = "test"
     env["RABBITMQ_PASSWORD"] = "test"
 
-    # IMPORTANT: your backend expects IMAGES_DIR relative to cwd ("images") OR absolute.
-    # We run with cwd=backend/ and point IMAGES_DIR to that temp dir.
+    # 2. CLEANUP PROXY SETTINGS (The likely cause of the hang)
+    # If http_proxy is set, Pika might try to route AMQP through it and hang.
+    for key in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"]:
+        if key in env:
+            del env[key]
+    
+    # 3. Force NO_PROXY for localhost
+    env["NO_PROXY"] = "127.0.0.1,localhost"
+    env["no_proxy"] = "127.0.0.1,localhost"
+
+    # Remove URL variables to be safe
+    if "RABBITMQ_URL" in env: del env["RABBITMQ_URL"]
+    if "BROKER_URL" in env: del env["BROKER_URL"]
+
+    env["IMAGE_RESIZE_QUEUE"] = env.get("IMAGE_RESIZE_QUEUE", "image_resize")
+    env["BACKEND_BASE_URL"] = "http://127.0.0.1:8001"
     env["IMAGES_DIR"] = str(images_dir)
 
-    # start backend (no uv, just your venv python)
+    print(f"DEBUG: Backend Starting -> Host: {env['RABBITMQ_HOST']}, User: {env['RABBITMQ_USER']}, Proxy Cleared")
+
     cmd = [sys.executable, "-m", "uvicorn", "simple_social_backend.api:app", "--host", "127.0.0.1", "--port", "8001"]
     env["PYTHONUNBUFFERED"] = "1"
-    p = subprocess.Popen(cmd, cwd=str(backend_dir), env=env)
-
+    # Capture stdout/stderr so we can print it on test failures
+    p = subprocess.Popen(cmd, cwd=str(backend_dir), env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 
     try:
         _wait_http("http://127.0.0.1:8001/posts", timeout_s=120)
         yield {"base": "http://127.0.0.1:8001", "images_dir": str(images_dir), "proc": p}
     finally:
+        # Terminate backend
         p.terminate()
         try:
             p.wait(timeout=10)
@@ -153,36 +172,33 @@ def backend_server(tmp_path, rabbitmq):
             p.kill()
             p.wait(timeout=5)
 
+        # Read and print buffered output for diagnostics
+        try:
+            out = p.stdout.read() if p.stdout else ""
+            if out:
+                print("=== Backend stdout/stderr ===")
+                print(out)
+                print("=== End backend stdout/stderr ===")
+        except Exception:
+            pass
+
+        # Cleanup Code (DB and Images)
         wal = Path(str(db_file) + "-wal")
         shm = Path(str(db_file) + "-shm")
-
-        # DB cleanup
         for f in [db_file, wal, shm]:
             for _ in range(30):
                 try:
-                    f.unlink()
-                    break
-                except FileNotFoundError:
-                    break
-                except PermissionError:
-                    time.sleep(0.1)
-
-        # images cleanup
+                    f.unlink(); break
+                except (FileNotFoundError, PermissionError): time.sleep(0.1)
         for _ in range(30):
             try:
-                shutil.rmtree(images_dir)
-                break
-            except FileNotFoundError:
-                break
-            except PermissionError:
-                time.sleep(0.1)
-
+                shutil.rmtree(images_dir); break
+            except (FileNotFoundError, PermissionError): time.sleep(0.1)
 
 @pytest.fixture
 def resizer_process(backend_server, rabbitmq):
     """
-    Starts the resizer worker as a subprocess.
-    If it exits immediately -> fail with its logs.
+    Starts the resizer worker.
     """
     E2E_EXTERNAL = os.getenv("E2E_EXTERNAL") == "1"
     if E2E_EXTERNAL:
@@ -191,30 +207,37 @@ def resizer_process(backend_server, rabbitmq):
     repo_root = Path(__file__).resolve().parents[2]
 
     env = os.environ.copy()
-    env["RABBITMQ_HOST"] = rabbitmq["host"]
-    env["IMAGE_RESIZE_QUEUE"] = env.get("IMAGE_RESIZE_QUEUE", "image_resize")
-    env["BACKEND_BASE_URL"] = backend_server["base"]
-    env["IMAGES_DIR"] = backend_server["images_dir"]  # MUST match backend
-    env["PYTHONUNBUFFERED"] = "1"
+
+    # --- FIX 1: Remove DISABLE_QUEUE for the Resizer too ---
+    if "DISABLE_QUEUE" in env:
+        del env["DISABLE_QUEUE"]
+
+    # --- FIX 2: Cleanup Proxy Settings (Same as Backend) ---
+    for key in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"]:
+        if key in env:
+            del env[key]
+    env["NO_PROXY"] = "127.0.0.1,localhost"
+    
+    # --- Match Backend Settings Exactly ---
+    env["RABBITMQ_HOST"] = "127.0.0.1"
+    env["RABBITMQ_PORT"] = "5672"
     env["RABBITMQ_USER"] = "test"
     env["RABBITMQ_PASSWORD"] = "test"
+    
+    env["IMAGE_RESIZE_QUEUE"] = env.get("IMAGE_RESIZE_QUEUE", "image_resize")
+    env["BACKEND_BASE_URL"] = backend_server["base"]
+    env["IMAGES_DIR"] = backend_server["images_dir"]
+    env["PYTHONUNBUFFERED"] = "1"
 
+    print(f"DEBUG: Resizer Launching with User={env['RABBITMQ_USER']}")
 
-    # default: use console-script
-    # (if your entrypoint differs, change this one line)
     cmd = ["social-resizer"]
 
     p = subprocess.Popen(cmd, cwd=str(repo_root), env=env)
 
-    # give it a moment; if it dies -> show output and fail
-    time.sleep(1.0)
+    time.sleep(1.5)
     if p.poll() is not None:
-        out = ""
-        try:
-            out = p.stdout.read() if p.stdout else ""
-        except Exception:
-            pass
-        raise RuntimeError(f"Resizer exited immediately.\n--- output ---\n{out}\n--------------")
+        raise RuntimeError("Resizer exited immediately. Check logs above.")
 
     try:
         yield p

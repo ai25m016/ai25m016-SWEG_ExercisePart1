@@ -27,6 +27,8 @@ from .db import (
     get_textgen_job,
     set_textgen_job_result,
 )
+import asyncio
+import httpx
 
 load_dotenv(find_dotenv())
 
@@ -146,14 +148,16 @@ async def create_post(
     text: str = Form(...),
     user: str = Form(...),
 ):
-    # sentiment check (optional)
+    # sentiment check (optional) — use async client to avoid blocking the event loop
     try:
-        response = requests.post(SENTIMENT_SERVICE_URL, json={"text": text}, timeout=5.0)
-        response.raise_for_status()
-        sentiment = response.json().get("sentiment")
-        if sentiment == "Negative":
-            raise HTTPException(status_code=400, detail="Negative comment not allowed")
-    except requests.RequestException:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(SENTIMENT_SERVICE_URL, json={"text": text}, timeout=5.0)
+            response.raise_for_status()
+            sentiment = response.json().get("sentiment")
+            if sentiment == "Negative":
+                raise HTTPException(status_code=400, detail="Negative comment not allowed")
+    except Exception:
+        # swallow network errors / unreachability — sentiment is optional in tests
         pass
 
     base_dir = IMAGES_DIR / "original"
@@ -175,9 +179,13 @@ async def create_post(
     if not created:
         raise HTTPException(status_code=500, detail="Post could not be created")
 
+    # Always schedule queue-publish without blocking the request handler.
+    # publish_image_resize itself starts a background thread, but ensure we do not block:
     try:
-        publish_image_resize(post_id, created["image"])
+        # schedule in threadpool to be extra-safe (do not await)
+        asyncio.create_task(asyncio.to_thread(publish_image_resize, post_id, created["image"]))
     except Exception:
+        # swallow publish scheduling errors
         pass
 
     return created

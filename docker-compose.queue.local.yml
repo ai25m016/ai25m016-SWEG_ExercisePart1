@@ -49,8 +49,10 @@ services:
       RABBITMQ_PASSWORD: test
       IMAGE_RESIZE_QUEUE: image_resize
       TEXT_GENERATION_QUEUE: text_generation
+      SENTIMENT_RPC_QUEUE: sentiment_rpc_queue
       IMAGES_DIR: /app/backend/images
       SENTIMENT_SERVICE_URL: "http://sentiment-analysis:8001/predict"
+      # DISABLE_QUEUE: "true"   # optional: schaltet Queues komplett ab
     ports:
       - "8000:8000"
     volumes:
@@ -117,14 +119,20 @@ services:
       - hf_cache:/hf_cache
 
   sentiment-analysis:
-    build:
-      context: ./sentiment_analysis
-      dockerfile: Dockerfile
-    image: simple-social-sentiment
+    image: ghcr.io/moerz1423/sentiment-analysis:latest
     container_name: simple-social-sentiment
     restart: always
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
     ports:
       - "8001:8001"
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: test
+      RABBITMQ_PASSWORD: test
+      SENTIMENT_RPC_QUEUE: sentiment_rpc_queue
+      PYTHONUNBUFFERED: "1"
 
 volumes:
   social_db_data_local:

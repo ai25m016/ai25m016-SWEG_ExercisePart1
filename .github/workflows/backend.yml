@@ -28,11 +28,18 @@ jobs:
         env:
           RABBITMQ_DEFAULT_USER: test
           RABBITMQ_DEFAULT_PASS: test
+        # CHANGE START
         options: >-
-          --health-cmd "rabbitmq-diagnostics -q ping"
-          --health-interval 5s
+          --health-cmd "rabbitmq-diagnostics -q check_port_connectivity"
+          --health-interval 10s
           --health-timeout 5s
-          --health-retries 20
+          --health-retries 5
+        # CHANGE END
+        # options: >-
+        #   --health-cmd "rabbitmq-diagnostics -q ping"
+        #   --health-interval 5s
+        #   --health-timeout 5s
+        #   --health-retries 20
 
     steps:
       - uses: actions/checkout@v4
@@ -47,6 +54,7 @@ jobs:
           python -m pip install -U pip
           pip install -e image_resizer
           pip install -e "backend[dev]"
+          pip install --force-reinstall "pika>=1.3.2"
 
       - name: API tests
         run: python -m pytest backend/tests -m api -q
@@ -57,4 +65,10 @@ jobs:
           RABBITMQ_USER: test
           RABBITMQ_PASSWORD: test
           IMAGE_RESIZE_QUEUE: image_resize
-        run: python -m pytest backend/tests -m e2e -q -s
+        run: |
+          echo "========================================"
+          echo "🔍 TRUTH: ACTUAL INSTALLED PIKA VERSION:"
+          python -c "import pika; print(pika.__version__)"
+          echo "========================================"
+
+          python -m pytest backend/tests -m e2e -q -s
