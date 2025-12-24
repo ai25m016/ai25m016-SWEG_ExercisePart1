@@ -22,46 +22,68 @@ SENTIMENT_RPC_QUEUE = os.getenv("SENTIMENT_RPC_QUEUE", "sentiment_rpc_queue")
 def _disabled() -> bool:
     return pika is None or os.getenv("DISABLE_QUEUE", "").lower() == "true"
 
-
-# def _get_channel():
-#     creds = pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASSWORD)
-#     params = pika.ConnectionParameters(host=RABBITMQ_HOST, credentials=creds)
-#     connection = pika.BlockingConnection(params)
-#     channel = connection.channel()
-#     return connection, channel
-
 def _get_channel():
+    """
+    Create a pika connection/channel with short timeouts so it does not block the web request indefinitely.
+    """
     creds = pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASSWORD)
+
+    # socket_timeout makes connect/read fail fast; connection_attempts=1 avoids long retry loops
     params = pika.ConnectionParameters(
-        host=RABBITMQ_HOST, 
+        host=RABBITMQ_HOST,
         credentials=creds,
-        socket_timeout=5,      # <--- ADD THIS (Fail after 5s)
-        blocked_connection_timeout=5 # <--- ADD THIS
+        heartbeat=60,
+        blocked_connection_timeout=5,
+        connection_attempts=1,
+        socket_timeout=2,
     )
-    # The hang happens on this next line:
+
     connection = pika.BlockingConnection(params)
     channel = connection.channel()
     return connection, channel
 
+def _do_publish_image_resize(post_id: int, image: str) -> None:
+    """
+    Actually perform the publish. Runs in a background thread and swallows exceptions
+    so the web request is not affected.
+    """
+    if pika is None or os.getenv("DISABLE_QUEUE", "").lower() == "true":
+        return
+
+    try:
+        connection, channel = _get_channel()
+        try:
+            channel.queue_declare(queue=IMAGE_RESIZE_QUEUE, durable=True)
+            body = json.dumps({"post_id": post_id, "image": image})
+            channel.basic_publish(
+                exchange="",
+                routing_key=IMAGE_RESIZE_QUEUE,
+                body=body.encode("utf-8"),
+                properties=pika.BasicProperties(delivery_mode=2),
+            )
+        finally:
+            try:
+                connection.close()
+            except Exception:
+                pass
+    except Exception as exc:
+        # log the failure (print is fine for tests/CI), but do not raise
+        print(f"[events] publish_image_resize failed (post_id={post_id}): {exc}")
+
 # ----------------------------
 # Async: Image Resize
 # ----------------------------
+
 def publish_image_resize(post_id: int, image: str) -> None:
-    if _disabled():
+    """
+    Non-blocking API: schedule the actual publish in a background thread and return immediately.
+    """
+    if pika is None or os.getenv("DISABLE_QUEUE", "").lower() == "true":
         return
 
-    connection, channel = _get_channel()
-    channel.queue_declare(queue=IMAGE_RESIZE_QUEUE, durable=True)
-
-    body = json.dumps({"post_id": post_id, "image": image}).encode("utf-8")
-    channel.basic_publish(
-        exchange="",
-        routing_key=IMAGE_RESIZE_QUEUE,
-        body=body,
-        properties=pika.BasicProperties(delivery_mode=2),
-    )
-    connection.close()
-
+    # fire-and-forget: background thread will attempt the publish and log errors
+    t = Thread(target=_do_publish_image_resize, args=(post_id, image), daemon=True)
+    t.start()
 
 # ----------------------------
 # Async: Text Generation Job
