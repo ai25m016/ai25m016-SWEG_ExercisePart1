@@ -122,8 +122,8 @@ def backend_server(tmp_path, rabbitmq):
     (images_dir / "thumbs").mkdir(parents=True, exist_ok=True)
 
     env = os.environ.copy()
-    # if "DISABLE_QUEUE" in env:
-    #     del env["DISABLE_QUEUE"]
+    if "DISABLE_QUEUE" in env:
+        del env["DISABLE_QUEUE"]
 
     db_file = tmp_path / "test_social.db"
     env["DB_PATH"] = str(db_file)
