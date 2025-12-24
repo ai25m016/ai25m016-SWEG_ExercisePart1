@@ -196,6 +196,16 @@ def resizer_process(backend_server, rabbitmq):
     repo_root = Path(__file__).resolve().parents[2]
 
     env = os.environ.copy()
+
+    # --- FIX 1: Remove DISABLE_QUEUE for the Resizer too ---
+    if "DISABLE_QUEUE" in env:
+        del env["DISABLE_QUEUE"]
+
+    # --- FIX 2: Cleanup Proxy Settings (Same as Backend) ---
+    for key in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"]:
+        if key in env:
+            del env[key]
+    env["NO_PROXY"] = "127.0.0.1,localhost"
     
     # --- Match Backend Settings Exactly ---
     env["RABBITMQ_HOST"] = "127.0.0.1"
@@ -212,7 +222,6 @@ def resizer_process(backend_server, rabbitmq):
 
     cmd = ["social-resizer"]
 
-    # No pipes! Print directly to console so we can see errors instantly.
     p = subprocess.Popen(cmd, cwd=str(repo_root), env=env)
 
     time.sleep(1.5)
