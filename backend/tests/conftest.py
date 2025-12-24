@@ -123,7 +123,6 @@ def backend_server(tmp_path, rabbitmq):
                     time.sleep(0.1)
         return
 
-    # --- INTERNAL BACKEND SETUP ---
     repo_root = Path(__file__).resolve().parents[2]
     backend_dir = repo_root / "backend"
 
@@ -139,36 +138,26 @@ def backend_server(tmp_path, rabbitmq):
     env["DB_PATH"] = str(db_file)
     
     # ---------------------------------------------------------
-    # FINAL NETWORK CONFIGURATION
+    # CORRECT CONFIGURATION
     # ---------------------------------------------------------
-    # 1. Get Details
-    rmq_host = "127.0.0.1"  # IPv4 Mandatory
-    rmq_port = str(rabbitmq.get("port", rabbitmq.get("amqp_port", "5672")))
-    rmq_user = rabbitmq.get("user", rabbitmq.get("username", "test"))
-    rmq_pass = rabbitmq.get("password", "test")
-
-    # 2. Set INDIVIDUAL variables (for apps that use these)
-    env["RABBITMQ_HOST"] = rmq_host
-    env["RABBITMQ_PORT"] = rmq_port
-    env["RABBITMQ_USER"] = rmq_user
-    env["RABBITMQ_PASSWORD"] = rmq_pass
-
-    # 3. Set URL variables (for apps that prefer DSN strings)
-    # We construct this explicitly to stop the app from defaulting to 'localhost'
-    amqp_url = f"amqp://{rmq_user}:{rmq_pass}@{rmq_host}:{rmq_port}"
+    # 1. Force Host to 127.0.0.1 (IPv4)
+    env["RABBITMQ_HOST"] = "127.0.0.1"
     
-    env["RABBITMQ_URL"] = amqp_url
-    env["BROKER_URL"] = amqp_url
-    env["CELERY_BROKER_URL"] = amqp_url
+    # 2. Force User/Pass to 'guest' (Standard RabbitMQ default)
+    # The logs showed 'test' was refused (403), so we must use 'guest'.
+    env["RABBITMQ_USER"] = "guest"
+    env["RABBITMQ_PASSWORD"] = "guest"
 
-    # Standard Backend Config
+    # (Note: Backend code IGNORES the port, but Resizer uses it. 
+    # Since Resizer found the server on 5672, we set it here for consistency)
+    env["RABBITMQ_PORT"] = "5672"
+
     env["IMAGE_RESIZE_QUEUE"] = env.get("IMAGE_RESIZE_QUEUE", "image_resize")
     env["BACKEND_BASE_URL"] = "http://127.0.0.1:8001"
     env["IMAGES_DIR"] = str(images_dir)
 
-    print(f"DEBUG: Backend Starting -> URL: {amqp_url}")
+    print(f"DEBUG: Backend Launching with User={env['RABBITMQ_USER']} Host={env['RABBITMQ_HOST']}")
 
-    # Start backend
     cmd = [sys.executable, "-m", "uvicorn", "simple_social_backend.api:app", "--host", "127.0.0.1", "--port", "8001"]
     env["PYTHONUNBUFFERED"] = "1"
     
@@ -185,9 +174,9 @@ def backend_server(tmp_path, rabbitmq):
             p.kill()
             p.wait(timeout=5)
 
+        # Cleanup DB
         wal = Path(str(db_file) + "-wal")
         shm = Path(str(db_file) + "-shm")
-
         for f in [db_file, wal, shm]:
             for _ in range(30):
                 try:
@@ -198,6 +187,7 @@ def backend_server(tmp_path, rabbitmq):
                 except PermissionError:
                     time.sleep(0.1)
 
+        # Cleanup Images
         for _ in range(30):
             try:
                 shutil.rmtree(images_dir)
@@ -210,8 +200,7 @@ def backend_server(tmp_path, rabbitmq):
 @pytest.fixture
 def resizer_process(backend_server, rabbitmq):
     """
-    Starts the resizer worker as a subprocess.
-    If it exits immediately -> fail.
+    Starts the resizer worker.
     """
     E2E_EXTERNAL = os.getenv("E2E_EXTERNAL") == "1"
     if E2E_EXTERNAL:
@@ -221,31 +210,27 @@ def resizer_process(backend_server, rabbitmq):
 
     env = os.environ.copy()
     
-    # --- Sync settings with Backend ---
+    # --- Match Backend Settings ---
     env["RABBITMQ_HOST"] = "127.0.0.1"
-    
-    # Get Port/User/Pass from fixture
-    rmq_port = rabbitmq.get("port", rabbitmq.get("amqp_port", "5672"))
-    env["RABBITMQ_PORT"] = str(rmq_port)
-    env["RABBITMQ_USER"] = rabbitmq.get("user", rabbitmq.get("username", "test"))
-    env["RABBITMQ_PASSWORD"] = rabbitmq.get("password", "test")
+    env["RABBITMQ_PORT"] = "5672"
+    env["RABBITMQ_USER"] = "guest"
+    env["RABBITMQ_PASSWORD"] = "guest"
     
     env["IMAGE_RESIZE_QUEUE"] = env.get("IMAGE_RESIZE_QUEUE", "image_resize")
     env["BACKEND_BASE_URL"] = backend_server["base"]
     env["IMAGES_DIR"] = backend_server["images_dir"]
     env["PYTHONUNBUFFERED"] = "1"
 
-    print(f"DEBUG: Resizer Config -> Host: {env['RABBITMQ_HOST']}, Port: {env['RABBITMQ_PORT']}, User: {env['RABBITMQ_USER']}")
+    print(f"DEBUG: Resizer Launching with User={env['RABBITMQ_USER']}")
 
     cmd = ["social-resizer"]
 
-    # --- FIX: REMOVE 'stdout=PIPE' so logs appear in console ---
+    # No stdout=PIPE, so we can see the logs directly!
     p = subprocess.Popen(cmd, cwd=str(repo_root), env=env)
 
-    # Check if it dies immediately
     time.sleep(1.5)
     if p.poll() is not None:
-        raise RuntimeError("Resizer exited immediately. Check the console logs above for the error!")
+        raise RuntimeError("Resizer exited immediately. Check logs above.")
 
     try:
         yield p
