@@ -198,8 +198,8 @@ def resizer_process(backend_server, rabbitmq):
     env = os.environ.copy()
 
     # --- FIX 1: Remove DISABLE_QUEUE for the Resizer too ---
-    # if "DISABLE_QUEUE" in env:
-    #     del env["DISABLE_QUEUE"]
+    if "DISABLE_QUEUE" in env:
+        del env["DISABLE_QUEUE"]
 
     # --- FIX 2: Cleanup Proxy Settings (Same as Backend) ---
     for key in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"]:
