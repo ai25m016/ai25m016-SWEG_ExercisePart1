@@ -28,11 +28,18 @@ jobs:
         env:
           RABBITMQ_DEFAULT_USER: test
           RABBITMQ_DEFAULT_PASS: test
+        # CHANGE START
         options: >-
-          --health-cmd "rabbitmq-diagnostics -q ping"
-          --health-interval 5s
+          --health-cmd "rabbitmq-diagnostics -q check_port_connectivity"
+          --health-interval 10s
           --health-timeout 5s
-          --health-retries 20
+          --health-retries 5
+        # CHANGE END
+        # options: >-
+        #   --health-cmd "rabbitmq-diagnostics -q ping"
+        #   --health-interval 5s
+        #   --health-timeout 5s
+        #   --health-retries 20
 
     steps:
       - uses: actions/checkout@v4
