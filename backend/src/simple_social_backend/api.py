@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from fastapi.concurrency import run_in_threadpool
+
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -200,9 +202,16 @@ async def create_post(
     if not created:
         raise HTTPException(status_code=500, detail="Post could not be created")
 
+    # # 3) Trigger Resize async
+    # try:
+    #     publish_image_resize(post_id, created["image"])
+    # except Exception:
+    #     pass
+
     # 3) Trigger Resize async
     try:
-        publish_image_resize(post_id, created["image"])
+        # ✅ FIX: Run the blocking Pika call in a separate thread
+        await run_in_threadpool(publish_image_resize, post_id, created["image"])
     except Exception:
         pass
 
