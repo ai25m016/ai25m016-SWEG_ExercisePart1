@@ -137,26 +137,23 @@ def backend_server(tmp_path, rabbitmq):
     db_file = tmp_path / "test_social.db"
     env["DB_PATH"] = str(db_file)
     
-    # ---------------------------------------------------------
-    # CORRECT CONFIGURATION
-    # ---------------------------------------------------------
-    # 1. Force Host to 127.0.0.1 (IPv4)
+    # --- NETWORK CONFIGURATION ---
+    # We use 'test' because 'guest' was refused (403).
+    # We use 127.0.0.1 to avoid IPv6/localhost issues.
     env["RABBITMQ_HOST"] = "127.0.0.1"
-    
-    # 2. Force User/Pass to 'guest' (Standard RabbitMQ default)
-    # The logs showed 'test' was refused (403), so we must use 'guest'.
-    env["RABBITMQ_USER"] = "guest"
-    env["RABBITMQ_PASSWORD"] = "guest"
-
-    # (Note: Backend code IGNORES the port, but Resizer uses it. 
-    # Since Resizer found the server on 5672, we set it here for consistency)
     env["RABBITMQ_PORT"] = "5672"
+    env["RABBITMQ_USER"] = "test"
+    env["RABBITMQ_PASSWORD"] = "test"
+
+    # Remove URL variables to ensure Backend uses the explicit HOST/USER variables above
+    if "RABBITMQ_URL" in env: del env["RABBITMQ_URL"]
+    if "BROKER_URL" in env: del env["BROKER_URL"]
 
     env["IMAGE_RESIZE_QUEUE"] = env.get("IMAGE_RESIZE_QUEUE", "image_resize")
     env["BACKEND_BASE_URL"] = "http://127.0.0.1:8001"
     env["IMAGES_DIR"] = str(images_dir)
 
-    print(f"DEBUG: Backend Launching with User={env['RABBITMQ_USER']} Host={env['RABBITMQ_HOST']}")
+    print(f"DEBUG: Backend Starting -> Host: {env['RABBITMQ_HOST']}, User: {env['RABBITMQ_USER']}")
 
     cmd = [sys.executable, "-m", "uvicorn", "simple_social_backend.api:app", "--host", "127.0.0.1", "--port", "8001"]
     env["PYTHONUNBUFFERED"] = "1"
@@ -174,7 +171,7 @@ def backend_server(tmp_path, rabbitmq):
             p.kill()
             p.wait(timeout=5)
 
-        # Cleanup DB
+        # Cleanup
         wal = Path(str(db_file) + "-wal")
         shm = Path(str(db_file) + "-shm")
         for f in [db_file, wal, shm]:
@@ -186,8 +183,6 @@ def backend_server(tmp_path, rabbitmq):
                     break
                 except PermissionError:
                     time.sleep(0.1)
-
-        # Cleanup Images
         for _ in range(30):
             try:
                 shutil.rmtree(images_dir)
@@ -210,11 +205,11 @@ def resizer_process(backend_server, rabbitmq):
 
     env = os.environ.copy()
     
-    # --- Match Backend Settings ---
+    # --- Match Backend Settings Exactly ---
     env["RABBITMQ_HOST"] = "127.0.0.1"
     env["RABBITMQ_PORT"] = "5672"
-    env["RABBITMQ_USER"] = "guest"
-    env["RABBITMQ_PASSWORD"] = "guest"
+    env["RABBITMQ_USER"] = "test"
+    env["RABBITMQ_PASSWORD"] = "test"
     
     env["IMAGE_RESIZE_QUEUE"] = env.get("IMAGE_RESIZE_QUEUE", "image_resize")
     env["BACKEND_BASE_URL"] = backend_server["base"]
@@ -225,7 +220,7 @@ def resizer_process(backend_server, rabbitmq):
 
     cmd = ["social-resizer"]
 
-    # No stdout=PIPE, so we can see the logs directly!
+    # No pipes! Print directly to console so we can see errors instantly.
     p = subprocess.Popen(cmd, cwd=str(repo_root), env=env)
 
     time.sleep(1.5)
