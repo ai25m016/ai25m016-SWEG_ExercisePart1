@@ -1,6 +1,7 @@
 import json
 import os
 import uuid
+import time
 from threading import Thread
 
 try:
@@ -128,7 +129,14 @@ def publish_textgen_job(job_id: int, prompt: str, max_new_tokens: int = 60) -> N
 class SentimentRpcClient:
     def __init__(self):
         creds = pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASSWORD)
-        params = pika.ConnectionParameters(host=RABBITMQ_HOST, credentials=creds)
+        # Use timeouts to fail fast
+        params = pika.ConnectionParameters(
+            host=RABBITMQ_HOST, 
+            credentials=creds,
+            blocked_connection_timeout=5,
+            connection_attempts=1,
+            socket_timeout=2
+        )
         self.connection = pika.BlockingConnection(params)
         self.channel = self.connection.channel()
 
@@ -166,9 +174,19 @@ class SentimentRpcClient:
             body=payload,
         )
 
-        # block until response arrives
+        # -----------------------------------------------------
+        # 2. FIX: ADD TIMEOUT LOOP
+        # Don't wait forever if the sentiment service is offline!
+        # -----------------------------------------------------
+        start_time = time.time()
+        timeout_seconds = 5  # Wait max 5 seconds
+
         while self.response is None:
             self.connection.process_data_events(time_limit=1)
+            
+            # Check for timeout
+            if time.time() - start_time > timeout_seconds:
+                raise TimeoutError("Sentiment RPC timed out (Service offline?)")
 
         data = json.loads(self.response.decode("utf-8"))
         return data.get("sentiment", "Neutral")
