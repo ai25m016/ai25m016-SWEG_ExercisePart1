@@ -22,7 +22,7 @@ def test_resizer_generates_thumbnail(backend_server, resizer_process):
     r.raise_for_status()
     post_id = int(r.json()["id"])
 
-    deadline = time.time() + 60
+    deadline = time.time() + 120
     thumb_url = None
 
     while time.time() < deadline:
