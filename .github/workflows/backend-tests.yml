@@ -11,15 +11,22 @@ jobs:
   api:
     name: api
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Create .env for compose (CI)
+        run: |
+          cat > .env <<'EOF'
+          POSTGRES_DB=test
+          POSTGRES_USER=test
+          POSTGRES_PASSWORD=test
+          RABBITMQ_USER=test
+          RABBITMQ_PASSWORD=test
+          EOF
 
       - name: Install backend deps (uv)
         working-directory: backend
@@ -33,19 +40,31 @@ jobs:
         run: |
           uv run pytest -c pytest.ini tests -m api -q
 
+      - name: Docker cleanup (always)
+        if: always()
+        run: |
+          docker compose --project-directory "${GITHUB_WORKSPACE}" -f docker-compose.local.yml down -v || true
+          docker compose --project-directory "${GITHUB_WORKSPACE}" -f docker-compose.yml down -v || true
 
   persistence:
     name: persistence
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Create .env for compose (CI)
+        run: |
+          cat > .env <<'EOF'
+          POSTGRES_DB=test
+          POSTGRES_USER=test
+          POSTGRES_PASSWORD=test
+          RABBITMQ_USER=test
+          RABBITMQ_PASSWORD=test
+          EOF
 
       - name: Install backend deps (uv)
         working-directory: backend
@@ -57,8 +76,10 @@ jobs:
       - name: Run persistence tests
         working-directory: backend
         env:
-          PERSIST_COMPOSE_FILE: ../docker-compose.local.yml
-          PERSIST_BASE_URL: http://127.0.0.1:8000
+          # conftest.py liest E2E_COMPOSE_FILE oder COMPOSE_FILE
+          COMPOSE_FILE: ../docker-compose.local.yml
+          # conftest.py nutzt RESIZER_BASE_URL als Base URL (Default 127.0.0.1:8000)
+          RESIZER_BASE_URL: http://127.0.0.1:8000
         run: |
           uv run pytest -c pytest.ini tests -m persistence -vv -s
 
@@ -68,19 +89,25 @@ jobs:
           docker compose --project-directory "${GITHUB_WORKSPACE}" -f docker-compose.local.yml down -v || true
           docker compose --project-directory "${GITHUB_WORKSPACE}" -f docker-compose.yml down -v || true
 
-
   resizer:
     name: resizer
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Create .env for compose (CI)
+        run: |
+          cat > .env <<'EOF'
+          POSTGRES_DB=test
+          POSTGRES_USER=test
+          POSTGRES_PASSWORD=test
+          RABBITMQ_USER=test
+          RABBITMQ_PASSWORD=test
+          EOF
 
       - name: Install backend deps (uv)
         working-directory: backend
@@ -92,7 +119,8 @@ jobs:
       - name: Run resizer tests
         working-directory: backend
         env:
-          E2E_COMPOSE_FILE: ../docker-compose.local.yml
+          COMPOSE_FILE: ../docker-compose.local.yml
+          RESIZER_BASE_URL: http://127.0.0.1:8000
         run: |
           uv run pytest -c pytest.ini tests -m resizer -vv -s
 
