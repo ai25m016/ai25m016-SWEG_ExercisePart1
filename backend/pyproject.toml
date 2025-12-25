@@ -14,6 +14,7 @@ dependencies = [
   "python-dotenv",
   "requests",
   "httpx",
+  "pillow>=10.0.0",
 ]
 
 [project.optional-dependencies]
