@@ -57,6 +57,7 @@ services:
       SENTIMENT_RPC_QUEUE: sentiment_rpc_queue
       IMAGES_DIR: /app/backend/images
       SENTIMENT_SERVICE_URL: "http://sentiment-analysis:8001/predict"
+    command: ["uvicorn", "simple_social_backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
     ports:
       - "8000:8000"
     volumes:

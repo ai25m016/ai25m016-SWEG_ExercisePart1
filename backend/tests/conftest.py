@@ -96,13 +96,18 @@ def _wait_http_ok(url: str, timeout_s: int = 150) -> None:
     while time.time() < end:
         try:
             r = requests.get(url, timeout=2)
-            # < 500 means server answers (even 404/401 is fine for "up")
             if r.status_code < 500:
                 return
             last = f"HTTP {r.status_code}"
         except Exception as e:
             last = repr(e)
         time.sleep(2)
+
+    # DEBUG output on failure (very helpful in CI)
+    print("[debug] docker compose ps:", flush=True)
+    _run(_dc_base(REPO_ROOT, COMPOSE_FILE) + ["ps"])          # falls du Zugriff hast
+    print("[debug] docker compose logs backend:", flush=True)
+    _run(_dc_base(REPO_ROOT, COMPOSE_FILE) + ["logs", "--no-color", "--tail=200", "backend"])
     raise RuntimeError(f"Service not ready: {url} (last={last})")
 
 
