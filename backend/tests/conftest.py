@@ -1,85 +1,77 @@
+import os
 import time
 import subprocess
-from pathlib import Path
+from io import BytesIO
 
 import pytest
-from dotenv import dotenv_values
+import requests
+from PIL import Image
 
+pytestmark = pytest.mark.persistence
 
-def _run(cmd: list[str]) -> None:
-    subprocess.check_call(cmd)
+BASE = os.getenv("PERSIST_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
+COMPOSE_FILE = os.getenv("PERSIST_COMPOSE_FILE", "docker-compose.local.yml")
 
+def run(*args):
+    subprocess.check_call(args)
 
-def _wait_pg_isready(
-    compose_file: Path,
-    service: str,
-    user: str,
-    dbname: str,
-    timeout_s: int = 120
-) -> None:
+def wait_backend(timeout_s=80):
     end = time.time() + timeout_s
     last = None
     while time.time() < end:
         try:
-            subprocess.check_call(
-                [
-                    "docker", "compose", "-f", str(compose_file),
-                    "exec", "-T", service,
-                    "pg_isready", "-U", user, "-d", dbname
-                ],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-            return
+            r = requests.get(f"{BASE}/docs", timeout=2)
+            if r.status_code == 200:
+                return
+            last = f"{r.status_code}"
         except Exception as e:
             last = repr(e)
-            time.sleep(0.5)
-    raise RuntimeError(f"Postgres nicht ready nach {timeout_s}s. last={last}")
+        time.sleep(2)
+    raise RuntimeError(f"Backend not ready in time (last={last})")
 
+def create_post(marker: str):
+    img = Image.new("RGB", (32, 32))
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
 
-@pytest.fixture(scope="session")
-def docker_postgres():
-    """
-    Startet IMMER docker compose db und stoppt IMMER am Ende (down -v).
-    Kein SQLite mehr.
-    DB-Name/User/Password kommen aus .env, so wie im Compose.
-    """
-    repo_root = Path(__file__).resolve().parents[2]  # backend/tests -> repo root
-    compose_file = repo_root / "docker-compose.local.yml"
-    env_file = repo_root / ".env"
+    files = {"image": ("persist.png", buf, "image/png")}
+    data = {"user": "persist_user", "text": marker}
 
-    env = dotenv_values(env_file)
+    r = requests.post(f"{BASE}/posts", data=data, files=files, timeout=20)
+    r.raise_for_status()
+    return r.json()
 
-    # Compose nutzt: POSTGRES_DB=${DB_NAME}_LOCAL, POSTGRES_USER=${DB_USER}_LOCAL, PASS=${DB_PASSWORD}
-    dbname = f"{env['DB_NAME']}_LOCAL"
-    dbuser = f"{env['DB_USER']}_LOCAL"
-    dbpw = env["DB_PASSWORD"]
+def post_exists(marker: str) -> bool:
+    r = requests.get(f"{BASE}/posts", timeout=10)
+    r.raise_for_status()
+    posts = r.json()
+    return any(p.get("text") == marker for p in posts)
 
-    print(f"[docker_postgres] compose_file={compose_file}", flush=True)
-    print("[docker_postgres] starting db via docker compose...", flush=True)
-    _run(["docker", "compose", "-f", str(compose_file), "up", "-d", "db"])
+@pytest.fixture
+def compose_stack():
+    # erst mal "clean", damit ein alter Stack nicht reinfunkt
+    run("docker", "compose", "-f", COMPOSE_FILE, "down", "-v")
 
-    print("[docker_postgres] waiting for pg_isready...", flush=True)
-    _wait_pg_isready(
-        compose_file,
-        service="db",
-        user=dbuser,
-        dbname=dbname,
-        timeout_s=120,
-    )
-    print("[docker_postgres] postgres is ready ✅", flush=True)
+    # Stack hoch
+    run("docker", "compose", "-f", COMPOSE_FILE, "up", "-d", "--build", "db", "backend")
+    wait_backend(timeout_s=120)
 
-    yield {"db_name": dbname, "db_user": dbuser, "db_password": dbpw}
+    yield
 
-    print("[docker_postgres] stopping db (down -v)...", flush=True)
-    _run(["docker", "compose", "-f", str(compose_file), "down", "-v"])
-    print("[docker_postgres] stopped ✅", flush=True)
+    # am Ende immer aufräumen
+    run("docker", "compose", "-f", COMPOSE_FILE, "down", "-v")
 
+def test_db_persistence_survives_restart(compose_stack):
+    marker = f"persist-test-{int(time.time())}"
 
-@pytest.fixture(autouse=True)
-def _auto_db_for_api(request):
-    """
-    Für alle Tests mit Marker 'api' wird automatisch Postgres hochgefahren.
-    """
-    if request.node.get_closest_marker("api"):
-        request.getfixturevalue("docker_postgres")
+    create_post(marker)
+
+    # down ohne -v => Volume bleibt
+    run("docker", "compose", "-f", COMPOSE_FILE, "down")
+
+    # wieder hoch
+    run("docker", "compose", "-f", COMPOSE_FILE, "up", "-d", "db", "backend")
+    wait_backend(timeout_s=120)
+
+    assert post_exists(marker), f"Post '{marker}' not found after restart"

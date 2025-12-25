@@ -2,6 +2,7 @@ import os
 import time
 import subprocess
 from io import BytesIO
+from pathlib import Path
 
 import pytest
 import requests
@@ -9,11 +10,35 @@ from PIL import Image
 
 pytestmark = pytest.mark.persistence
 
+
+def _pick_compose_file() -> str:
+    """
+    Fallback: docker-compose.local.yml, sonst docker-compose.yml
+    Kann per ENV PERSIST_COMPOSE_FILE überschrieben werden.
+    """
+    override = os.getenv("PERSIST_COMPOSE_FILE")
+    if override:
+        return override
+
+    repo_root = Path(__file__).resolve().parents[2]
+    candidates = [
+        repo_root / "docker-compose.local.yml",
+        repo_root / "docker-compose.yml",
+    ]
+    for p in candidates:
+        if p.exists():
+            return str(p)
+
+    raise FileNotFoundError(f"Kein Compose-File gefunden. Gesucht: {candidates}")
+
+
 BASE = os.getenv("PERSIST_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
-COMPOSE_FILE = os.getenv("PERSIST_COMPOSE_FILE", "docker-compose.local.yml")
+COMPOSE_FILE = _pick_compose_file()
+
 
 def run(*args):
-    subprocess.check_call(args)
+    subprocess.check_call(list(args))
+
 
 def wait_backend(timeout_s=80):
     end = time.time() + timeout_s
@@ -29,6 +54,7 @@ def wait_backend(timeout_s=80):
         time.sleep(2)
     raise RuntimeError(f"Backend not ready in time (last={last})")
 
+
 def create_post(marker: str):
     img = Image.new("RGB", (32, 32))
     buf = BytesIO()
@@ -42,11 +68,13 @@ def create_post(marker: str):
     r.raise_for_status()
     return r.json()
 
+
 def post_exists(marker: str) -> bool:
     r = requests.get(f"{BASE}/posts", timeout=10)
     r.raise_for_status()
     posts = r.json()
     return any(p.get("text") == marker for p in posts)
+
 
 @pytest.fixture
 def compose_stack():
@@ -61,6 +89,7 @@ def compose_stack():
 
     # am Ende immer aufräumen
     run("docker", "compose", "-f", COMPOSE_FILE, "down", "-v")
+
 
 def test_db_persistence_survives_restart(compose_stack):
     marker = f"persist-test-{int(time.time())}"

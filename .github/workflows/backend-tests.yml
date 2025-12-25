@@ -1,4 +1,4 @@
-name: Backend API tests
+name: Backend tests
 
 on:
   push:
@@ -10,9 +10,8 @@ on:
     paths:
       - 'backend/**'
       - 'docker-compose.local.yml'
-      - '.env'
-      - '.env.example'
-      - '.github/workflows/backend-api-tests.yml'
+      - 'docker-compose.yml'
+      - '.github/workflows/backend-tests.yml'
   pull_request:
     branches:
       - main
@@ -54,3 +53,39 @@ jobs:
       - name: Run API tests
         run: |
           pytest -c backend/pytest.ini backend/tests -m api -q
+
+  persistence:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install backend + test deps
+        run: |
+          python -m pip install -U pip
+          python -m pip install -e "backend[dev]"
+          python -m pip install pytest pillow requests python-dotenv psycopg[binary]
+
+      - name: Create .env for docker compose (CI)
+        run: |
+          cat > .env << 'EOF'
+          DB_NAME=simple_social
+          DB_USER=simple_social
+          DB_PASSWORD=supersecret
+          EOF
+
+      - name: Show Docker versions
+        run: |
+          docker version
+          docker compose version
+
+      - name: Run persistence tests
+        run: |
+          pytest -c backend/pytest.ini backend/tests -m persistence -vv -s
