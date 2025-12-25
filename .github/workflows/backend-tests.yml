@@ -21,9 +21,15 @@ jobs:
       - name: Create .env for compose (CI)
         run: |
           cat > .env <<'EOF'
-          POSTGRES_DB=test
-          POSTGRES_USER=test
-          POSTGRES_PASSWORD=test
+          DB_NAME=test
+          DB_USER=test
+          DB_PASSWORD=test
+
+          # für docker-compose.local.yml:
+          # backend setzt DATABASE_URL: ${DATABASE_URL_LOCAL}
+          # => innerhalb compose muss Host "db" sein
+          DATABASE_URL_LOCAL=postgresql+psycopg://test:test@db:5432/test
+
           RABBITMQ_USER=test
           RABBITMQ_PASSWORD=test
           EOF
@@ -35,8 +41,16 @@ jobs:
           pip install uv
           uv sync --frozen --no-editable
 
+      - name: Bring up DB (api)
+        run: |
+          docker compose --project-directory "${GITHUB_WORKSPACE}" -f docker-compose.local.yml up -d --build db
+
       - name: Run API tests
         working-directory: backend
+        env:
+          # conftest sucht docker-compose.local.yml auch selbst,
+          # aber wir geben es explizit:
+          COMPOSE_FILE: ../docker-compose.local.yml
         run: |
           uv run pytest -c pytest.ini tests -m api -q
 
@@ -44,7 +58,6 @@ jobs:
         if: always()
         run: |
           docker compose --project-directory "${GITHUB_WORKSPACE}" -f docker-compose.local.yml down -v || true
-          docker compose --project-directory "${GITHUB_WORKSPACE}" -f docker-compose.yml down -v || true
 
   persistence:
     name: persistence
@@ -59,9 +72,11 @@ jobs:
       - name: Create .env for compose (CI)
         run: |
           cat > .env <<'EOF'
-          POSTGRES_DB=test
-          POSTGRES_USER=test
-          POSTGRES_PASSWORD=test
+          DB_NAME=test
+          DB_USER=test
+          DB_PASSWORD=test
+          DATABASE_URL_LOCAL=postgresql+psycopg://test:test@db:5432/test
+
           RABBITMQ_USER=test
           RABBITMQ_PASSWORD=test
           EOF
@@ -76,9 +91,7 @@ jobs:
       - name: Run persistence tests
         working-directory: backend
         env:
-          # conftest.py liest E2E_COMPOSE_FILE oder COMPOSE_FILE
           COMPOSE_FILE: ../docker-compose.local.yml
-          # conftest.py nutzt RESIZER_BASE_URL als Base URL (Default 127.0.0.1:8000)
           RESIZER_BASE_URL: http://127.0.0.1:8000
         run: |
           uv run pytest -c pytest.ini tests -m persistence -vv -s
@@ -87,7 +100,6 @@ jobs:
         if: always()
         run: |
           docker compose --project-directory "${GITHUB_WORKSPACE}" -f docker-compose.local.yml down -v || true
-          docker compose --project-directory "${GITHUB_WORKSPACE}" -f docker-compose.yml down -v || true
 
   resizer:
     name: resizer
@@ -102,9 +114,11 @@ jobs:
       - name: Create .env for compose (CI)
         run: |
           cat > .env <<'EOF'
-          POSTGRES_DB=test
-          POSTGRES_USER=test
-          POSTGRES_PASSWORD=test
+          DB_NAME=test
+          DB_USER=test
+          DB_PASSWORD=test
+          DATABASE_URL_LOCAL=postgresql+psycopg://test:test@db:5432/test
+
           RABBITMQ_USER=test
           RABBITMQ_PASSWORD=test
           EOF
@@ -128,4 +142,3 @@ jobs:
         if: always()
         run: |
           docker compose --project-directory "${GITHUB_WORKSPACE}" -f docker-compose.local.yml down -v || true
-          docker compose --project-directory "${GITHUB_WORKSPACE}" -f docker-compose.yml down -v || true

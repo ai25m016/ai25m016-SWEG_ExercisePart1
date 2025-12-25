@@ -1,4 +1,6 @@
 # backend/tests/conftest.py
+from __future__ import annotations
+
 import os
 import time
 import subprocess
@@ -30,7 +32,9 @@ def _pick_compose_file(repo_root: Path) -> Path:
     for f in cand:
         if f.exists():
             return f
-    raise FileNotFoundError("Kein Compose-File im Repo-Root gefunden (docker-compose.local.yml / docker-compose.yml).")
+    raise FileNotFoundError(
+        "Kein Compose-File im Repo-Root gefunden (docker-compose.local.yml / docker-compose.yml)."
+    )
 
 
 def _dc_base(repo_root: Path, compose_file: Path) -> list[str]:
@@ -62,7 +66,6 @@ def _pick_service(services: set[str], preferred: str, contains: list[str]) -> st
 
 
 def _service_is_running(dc: list[str], service: str) -> bool:
-    # docker compose ps -q <service> -> container id (if running)
     try:
         cid = _out(dc + ["ps", "-q", service])
         return bool(cid)
@@ -132,11 +135,25 @@ def compose_file(repo_root: Path) -> Path:
 
 
 # ----------------------------
-# Persistence/API: Postgres only
+# Docker Postgres (for local unit/api tests)
 # ----------------------------
+
+def _build_pg_url(cfg: dict) -> str:
+    user = cfg["db_user"]
+    pw = cfg["db_password"]
+    host = cfg["host"]
+    port = cfg["port"]
+    db = cfg["db_name"]
+    # psycopg3 URL
+    return f"postgresql+psycopg://{user}:{pw}@{host}:{port}/{db}"
+
 
 @pytest.fixture(scope="session")
 def docker_postgres(repo_root: Path, compose_file: Path):
+    """
+    Startet NUR den Postgres-Service aus docker-compose.local.yml/docker-compose.yml.
+    Diese DB ist für lokale Unit/API Tests gedacht (TestClient, keine echten Container-Backends).
+    """
     dc = _dc_base(repo_root, compose_file)
     services = _compose_services(dc)
 
@@ -146,6 +163,7 @@ def docker_postgres(repo_root: Path, compose_file: Path):
 
     print(f"[docker_postgres] compose_file={compose_file}", flush=True)
 
+    # Clean slate für Unit/API Läufe
     _run(dc + ["down", "-v"])
     _run(dc + ["up", "-d", "--build", db_service])
     _wait_pg_isready(dc, db_service, timeout_s=90)
@@ -183,8 +201,8 @@ BASE_URL = os.getenv("RESIZER_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
 @pytest.fixture(scope="session")
 def backend_server(repo_root: Path, compose_file: Path):
     """
-    Must return dict with key 'base' because test_resizer.py does backend_server['base'].
-    Starts a minimal set of services needed for /posts + image resize pipeline.
+    Für resizer E2E Tests:
+    Startet db + rabbitmq + image-resizer + backend (nur was existiert).
     """
     dc = _dc_base(repo_root, compose_file)
     services = _compose_services(dc)
@@ -197,7 +215,6 @@ def backend_server(repo_root: Path, compose_file: Path):
     if not backend_svc:
         raise RuntimeError(f"Kein Backend-Service gefunden. Services={sorted(services)}")
 
-    # Build list: only what exists in compose
     up_list: list[str] = []
     for s in [db_svc, rabbit_svc, resizer_svc, backend_svc]:
         if s and s not in up_list:
@@ -208,7 +225,6 @@ def backend_server(repo_root: Path, compose_file: Path):
     _run(dc + ["down", "-v"])
     _run(dc + ["up", "-d", "--build", *up_list])
 
-    # backend reachable
     _wait_http_ok(f"{BASE_URL}/docs", timeout_s=150)
 
     yield {"base": BASE_URL}
@@ -227,18 +243,73 @@ def resizer_process(repo_root: Path, compose_file: Path):
     dc = _dc_base(repo_root, compose_file)
     services = _compose_services(dc)
 
-    resizer_svc = _pick_service(
-        services,
-        "image-resizer",
-        ["image-resizer", "image_resizer", "resizer"],
-    )
-
+    resizer_svc = _pick_service(services, "image-resizer", ["image-resizer", "image_resizer", "resizer"])
     if not resizer_svc:
         yield
         return
 
-    # ensure running (no rebuild)
     if not _service_is_running(dc, resizer_svc):
         _run(dc + ["up", "-d", resizer_svc])
 
     yield
+
+
+# ----------------------------
+# Local Unit/API tests: TestClient + Docker Postgres (NO SQLite)
+# ----------------------------
+
+@pytest.fixture(autouse=True)
+def disable_rabbitmq_for_local_api_tests(request):
+    """
+    Für lokale TestClient-Tests wollen wir NICHT wirklich RabbitMQ erreichen.
+    Das verhindert z.B. getaddrinfo failed.
+    """
+    if request.node.get_closest_marker("api"):
+        os.environ.setdefault("RABBITMQ_HOST", "disabled")
+        os.environ.setdefault("RABBITMQ_USER", "disabled")
+        os.environ.setdefault("RABBITMQ_PASSWORD", "disabled")
+    yield
+
+
+def _init_schema_via_project_hook() -> None:
+    """
+    Wir wollen kein SQLite/social.db mehr.
+    In diesem Projekt ist init_db() der “Hook”.
+    """
+    import simple_social_backend.db as db
+
+    if callable(getattr(db, "init_db", None)):
+        db.init_db()
+        return
+
+    raise RuntimeError(
+        "Konnte das Schema nicht initialisieren: simple_social_backend.db.init_db() fehlt.\n"
+        "=> Bitte init_db() bereitstellen (SQLModel.metadata.create_all(...))."
+    )
+
+
+@pytest.fixture()
+def client(docker_postgres):
+    """
+    TestClient erst NACH DB-Setup erstellen.
+    Wichtig: Wir setzen NUR DATABASE_URL (Host-Port).
+    NICHT DATABASE_URL_LOCAL (sonst Docker-Compose Substitution kaputt bei E2E Tests).
+    """
+    pg_url = _build_pg_url(docker_postgres)
+
+    os.environ["DATABASE_URL"] = pg_url
+    os.environ["SQLALCHEMY_DATABASE_URL"] = pg_url
+    # ABSICHTLICH NICHT setzen:
+    os.environ.pop("DATABASE_URL_LOCAL", None)
+
+    import importlib
+    import simple_social_backend.db as db
+    importlib.reload(db)
+
+    _init_schema_via_project_hook()
+
+    import simple_social_backend.api as api
+    importlib.reload(api)
+
+    from fastapi.testclient import TestClient
+    return TestClient(api.app)

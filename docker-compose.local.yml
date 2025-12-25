@@ -8,7 +8,7 @@ services:
       POSTGRES_USER: ${DB_USER}_LOCAL
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
-      - social_db_data_local:/var/lib/postgresql/data
+      - pg_data_local:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     healthcheck:
@@ -138,6 +138,6 @@ services:
       PYTHONUNBUFFERED: "1"
 
 volumes:
-  social_db_data_local:
+  pg_data_local:
   images_data:
   hf_cache:
