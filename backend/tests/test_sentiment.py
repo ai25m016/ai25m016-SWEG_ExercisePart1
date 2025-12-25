@@ -1,5 +1,8 @@
+import pytest
 import io
 from unittest.mock import patch
+
+pytestmark = pytest.mark.sentiment  # markiere alle tests in dieser datei als "sentiment"-tests
 
 def create_dummy_image():
     return ("test.jpg", io.BytesIO(b"fake_image_content"), "image/jpeg")
