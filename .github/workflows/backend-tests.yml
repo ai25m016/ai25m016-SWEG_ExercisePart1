@@ -2,23 +2,11 @@ name: Backend tests
 
 on:
   push:
-    branches:
-      - 'feature/**'
-      - 'bugfix/**'
-      - 'hotfix/**'
-      - 'release/**'
-    paths:
-      - 'backend/**'
-      - 'docker-compose.local.yml'
-      - 'docker-compose.yml'
-      - '.github/workflows/backend-tests.yml'
   pull_request:
-    branches:
-      - main
-      - develop
 
 jobs:
   api:
+    name: api
     runs-on: ubuntu-latest
 
     steps:
@@ -29,29 +17,21 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: "pip"
 
-      - name: Install backend + test deps
+      - name: Install backend deps (uv)
+        working-directory: backend
         run: |
-          python -m pip install -U pip
-          python -m pip install -e "backend[dev]"
-          python -m pip install pytest pillow python-dotenv psycopg[binary]
-
-      - name: Create .env for docker compose (CI)
-        run: |
-          cat > .env << 'EOF'
-          DB_NAME=simple_social
-          DB_USER=simple_social
-          DB_PASSWORD=supersecret
-          # Für Container: Host ist "db" (compose service name)
-          DATABASE_URL_LOCAL=postgresql+psycopg://simple_social_LOCAL:supersecret@db:5432/simple_social_LOCAL
-          EOF
+          python -m pip install --upgrade pip
+          pip install uv
+          uv sync --frozen --no-editable
 
       - name: Run API tests
+        working-directory: backend
         run: |
-          pytest -c backend/pytest.ini backend/tests -m api -q
+          uv run pytest -c pytest.ini tests -m api -q
 
   persistence:
+    name: persistence
     runs-on: ubuntu-latest
 
     steps:
@@ -62,23 +42,19 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: "pip"
 
-      - name: Install backend + test deps
+      - name: Install backend deps (uv)
+        working-directory: backend
         run: |
-          python -m pip install -U pip
-          python -m pip install -e "backend[dev]"
-          python -m pip install pytest pillow requests python-dotenv psycopg[binary]
-
-      - name: Create .env for docker compose (CI)
-        run: |
-          cat > .env << 'EOF'
-          DB_NAME=simple_social
-          DB_USER=simple_social
-          DB_PASSWORD=supersecret
-          DATABASE_URL_LOCAL=postgresql+psycopg://simple_social_LOCAL:supersecret@db:5432/simple_social_LOCAL
-          EOF
+          python -m pip install --upgrade pip
+          pip install uv
+          uv sync --frozen --no-editable
 
       - name: Run persistence tests
+        working-directory: backend
+        env:
+          # Compose liegt im Repo-Root -> daher ../docker-compose.local.yml
+          PERSIST_COMPOSE_FILE: ../docker-compose.local.yml
+          PERSIST_BASE_URL: http://127.0.0.1:8000
         run: |
-          pytest -c backend/pytest.ini backend/tests -m persistence -vv -s
+          uv run pytest -c pytest.ini tests -m persistence -vv -s
