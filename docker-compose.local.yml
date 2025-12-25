@@ -4,9 +4,9 @@ services:
     container_name: simple-social-db-orch-local
     restart: always
     environment:
-      POSTGRES_DB: ${DB_NAME}_LOCAL
-      POSTGRES_USER: ${DB_USER}_LOCAL
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME_LOCAL:-simple_social_local}
+      POSTGRES_USER: ${DB_USER_LOCAL:-simple_social_local}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
     volumes:
       - pg_data_local:/var/lib/postgresql/data
     ports:
@@ -48,7 +48,7 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: ${DATABASE_URL_LOCAL}
+      DATABASE_URL: ${DATABASE_URL_LOCAL:-postgresql+psycopg://simple_social_local:postgres@db:5432/simple_social_local}
       RABBITMQ_HOST: rabbitmq
       RABBITMQ_USER: test
       RABBITMQ_PASSWORD: test
