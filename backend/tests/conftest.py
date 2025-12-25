@@ -20,7 +20,7 @@ def _pick_compose_file(repo_root: Path) -> Path:
         if f.exists():
             return f
     raise FileNotFoundError(
-        "Kein Compose-File gefunden. Erwartet: docker-compose.local.yml oder docker-compose.yml im Repo-Root."
+        f"Kein Compose-File gefunden. Erwartet im Repo-Root: {candidates}"
     )
 
 
@@ -37,18 +37,9 @@ def _wait_pg_isready(
         try:
             subprocess.check_call(
                 [
-                    "docker",
-                    "compose",
-                    "-f",
-                    str(compose_file),
-                    "exec",
-                    "-T",
-                    service,
-                    "pg_isready",
-                    "-U",
-                    user,
-                    "-d",
-                    dbname,
+                    "docker", "compose", "-f", str(compose_file),
+                    "exec", "-T", service,
+                    "pg_isready", "-U", user, "-d", dbname
                 ],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
@@ -64,12 +55,9 @@ def _wait_pg_isready(
 def docker_postgres():
     """
     Startet IMMER docker compose db und stoppt IMMER am Ende (down -v).
-    Kein SQLite mehr.
-    DB-Name/User/Password kommen aus .env (Repo-Root), so wie im Compose.
+    DB-Name/User/Password kommen aus .env im Repo-Root.
     """
-    repo_root = Path(__file__).resolve().parents[1]  # backend/ -> repo root? nein: backend liegt im repo_root/backend
-    # Achtung: conftest liegt in backend/, also ist repo_root = parents[1]
-    # Beispiel: .../repo/backend/conftest.py -> parents[1] == .../repo
+    repo_root = Path(__file__).resolve().parents[2]  # backend/tests -> repo root ✅
     compose_file = _pick_compose_file(repo_root)
     env_file = repo_root / ".env"
 
@@ -88,7 +76,7 @@ def docker_postgres():
 
     print("[docker_postgres] waiting for pg_isready...", flush=True)
     _wait_pg_isready(
-        compose_file,
+        compose_file=compose_file,
         service="db",
         user=dbuser,
         dbname=dbname,
