@@ -10,7 +10,7 @@ from PIL import Image
 pytestmark = pytest.mark.persistence
 
 BASE = os.getenv("PERSIST_BASE_URL", "http://127.0.0.1:8000").rstrip("/")
-COMPOSE_FILE = os.getenv("PERSIST_COMPOSE_FILE", "docker-compose.queue.local.yml")
+COMPOSE_FILE = os.getenv("PERSIST_COMPOSE_FILE", "docker-compose.local.yml")
 
 def run(*args):
     subprocess.check_call(args)

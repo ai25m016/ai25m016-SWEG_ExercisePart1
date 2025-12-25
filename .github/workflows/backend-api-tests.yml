@@ -1,0 +1,46 @@
+name: Backend API tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install backend + test deps
+        run: |
+          python -m pip install -U pip
+          # wenn dein backend/ ein pyproject.toml hat (wie bei dir):
+          python -m pip install -e "backend[dev]"
+          # safety (falls dev extras nicht alles drin haben):
+          python -m pip install pytest pillow python-dotenv psycopg[binary]
+
+      - name: Create .env for docker compose (CI)
+        run: |
+          # Falls du schon eine .env im Repo hast, kannst du diesen Step weglassen.
+          # Wichtig: conftest.py liest .env im Repo-Root, um DB_NAME/DB_USER/DB_PASSWORD zu bekommen.
+          cat > .env << 'EOF'
+          DB_NAME=simple_social
+          DB_USER=simple_social
+          DB_PASSWORD=supersecret
+          EOF
+
+      - name: Show Docker versions
+        run: |
+          docker version
+          docker compose version
+
+      - name: Run API tests (docker compose db is started/stopped by pytest)
+        run: |
+          pytest -c backend/pytest.ini backend/tests -m api -q
