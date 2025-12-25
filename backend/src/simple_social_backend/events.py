@@ -1,3 +1,4 @@
+# backend/src/simple_social_backend/events.py
 import json
 import os
 import uuid
@@ -10,32 +11,42 @@ except ImportError:
     pika = None
 
 
-RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "rabbitmq")
-RABBITMQ_USER = os.getenv("RABBITMQ_USER", "test")
-RABBITMQ_PASSWORD = os.getenv("RABBITMQ_PASSWORD", "test")
+def _env(name: str, default: str = "") -> str:
+    v = os.getenv(name)
+    return v if v is not None else default
 
-IMAGE_RESIZE_QUEUE = os.getenv("IMAGE_RESIZE_QUEUE", "image_resize")
-TEXTGEN_QUEUE = os.getenv("TEXT_GENERATION_QUEUE", "text_generation")
 
-# RPC queue for sentiment service
-SENTIMENT_RPC_QUEUE = os.getenv("SENTIMENT_RPC_QUEUE", "sentiment_rpc_queue")
-
-# ---------------------------------------------------------
-# MISSING FUNCTION - ADD THIS!
-# ---------------------------------------------------------
 def _disabled() -> bool:
-    """Check if queues are disabled via environment variable."""
-    return pika is None or os.getenv("DISABLE_QUEUE", "").lower() == "true"
-
-def _get_channel():
     """
-    Create a pika connection/channel with short timeouts so it does not block callers indefinitely.
+    Queues are disabled if:
+    - pika isn't installed
+    - DISABLE_QUEUE=true
+    - RABBITMQ_HOST is missing or explicitly set to 'disabled'
+      (your tests set this to avoid network calls)
     """
-    creds = pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASSWORD)
+    if pika is None:
+        return True
 
-    # Use short timeouts and single connection attempt to avoid long blocking behaviours
-    params = pika.ConnectionParameters(
-        host=RABBITMQ_HOST,
+    if _env("DISABLE_QUEUE", "").lower() == "true":
+        return True
+
+    host = _env("RABBITMQ_HOST", "rabbitmq").strip().lower()
+    if not host or host == "disabled":
+        return True
+
+    return False
+
+
+def _get_rabbit_params() -> "pika.ConnectionParameters":
+    host = _env("RABBITMQ_HOST", "rabbitmq")
+    user = _env("RABBITMQ_USER", "test")
+    password = _env("RABBITMQ_PASSWORD", "test")
+
+    creds = pika.PlainCredentials(user, password)
+
+    # Short timeouts & single attempt => fail fast, don't hang tests.
+    return pika.ConnectionParameters(
+        host=host,
         credentials=creds,
         heartbeat=60,
         blocked_connection_timeout=5,
@@ -43,100 +54,114 @@ def _get_channel():
         socket_timeout=2,
     )
 
+
+def _get_channel():
+    """
+    Create a pika connection/channel with short timeouts so it does not block callers indefinitely.
+    """
+    params = _get_rabbit_params()
     connection = pika.BlockingConnection(params)
     channel = connection.channel()
     return connection, channel
 
 
+def _safe_close(conn) -> None:
+    try:
+        conn.close()
+    except Exception:
+        pass
+
+
+# ----------------------------
+# Image Resize publish (non-blocking)
+# ----------------------------
+
 def _do_publish_image_resize(post_id: int, image: str) -> None:
     """
     Actually perform publishing. Runs in a background thread and swallows/logs exceptions.
     """
-    if pika is None or os.getenv("DISABLE_QUEUE", "").lower() == "true":
+    if _disabled():
         return
+
+    queue_name = _env("IMAGE_RESIZE_QUEUE", "image_resize")
 
     try:
         connection, channel = _get_channel()
         try:
-            channel.queue_declare(queue=IMAGE_RESIZE_QUEUE, durable=True)
-            body = json.dumps({"post_id": post_id, "image": image})
+            channel.queue_declare(queue=queue_name, durable=True)
+            body = json.dumps({"post_id": post_id, "image": image}).encode("utf-8")
             channel.basic_publish(
                 exchange="",
-                routing_key=IMAGE_RESIZE_QUEUE,
-                body=body.encode("utf-8"),
+                routing_key=queue_name,
+                body=body,
                 properties=pika.BasicProperties(delivery_mode=2),
             )
         finally:
-            try:
-                connection.close()
-            except Exception:
-                pass
+            _safe_close(connection)
     except Exception as exc:
-        # Print is fine for CI; replace with proper logger in real deployments
         print(f"[events] publish_image_resize failed (post_id={post_id}): {exc}")
 
 
 def publish_image_resize(post_id: int, image: str) -> None:
     """
     Non-blocking API: schedule the actual publish in a background thread and return immediately.
+    If queues are disabled, it's a no-op.
     """
-    if pika is None or os.getenv("DISABLE_QUEUE", "").lower() == "true":
+    if _disabled():
         return
 
-    t = Thread(target=_do_publish_image_resize, args=(post_id, image), daemon=True)
-    t.start()
+    Thread(target=_do_publish_image_resize, args=(post_id, image), daemon=True).start()
 
+
+# ----------------------------
+# Text Generation publish (sync)
+# ----------------------------
 
 def publish_textgen_job(job_id: int, prompt: str, max_new_tokens: int = 60) -> None:
     """
-    Publish a textgen job to the TEXTGEN_QUEUE. This implementation is intentionally
-    synchronous because callers expect the job to be enqueued quickly. However,
-    it respects DISABLE_QUEUE and will raise on obvious failures. Consider making
-    this background as well if you see blocking issues similar to image resize.
+    Publish a textgen job to the TEXT_GENERATION_QUEUE.
+
+    If queues are disabled: no-op.
+    If RabbitMQ is enabled but fails: raise, so API can mark the job as error.
     """
-    if pika is None or os.getenv("DISABLE_QUEUE", "").lower() == "true":
+    if _disabled():
         return
 
+    queue_name = _env("TEXT_GENERATION_QUEUE", "text_generation")
+
+    connection = None
     try:
         connection, channel = _get_channel()
-        try:
-            channel.queue_declare(queue=TEXTGEN_QUEUE, durable=True)
-            body = json.dumps({
+        channel.queue_declare(queue=queue_name, durable=True)
+        body = json.dumps(
+            {
                 "type": "job",
                 "job_id": job_id,
                 "prompt": prompt,
                 "max_new_tokens": max_new_tokens,
-            })
-            channel.basic_publish(
-                exchange="",
-                routing_key=TEXTGEN_QUEUE,
-                body=body.encode("utf-8"),
-                properties=pika.BasicProperties(delivery_mode=2),
-            )
-        finally:
-            try:
-                connection.close()
-            except Exception:
-                pass
-    except Exception as exc:
-        # For textgen we preserve the previous behavior which will let the caller catch
-        # exceptions (the API code handles setting the job to error if publish fails).
-        raise
+            }
+        ).encode("utf-8")
+        channel.basic_publish(
+            exchange="",
+            routing_key=queue_name,
+            body=body,
+            properties=pika.BasicProperties(delivery_mode=2),
+        )
+    finally:
+        if connection is not None:
+            _safe_close(connection)
+
 
 # ----------------------------
 # RPC: Sentiment Check
 # ----------------------------
+
 class SentimentRpcClient:
     def __init__(self):
-        creds = pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASSWORD)
-        # Use timeouts to fail fast
-        params = pika.ConnectionParameters(
-            host=RABBITMQ_HOST, 
-            credentials=creds,
-            blocked_connection_timeout=5,
-            connection_attempts=1,
-            socket_timeout=2
-        )
+        if _disabled():
+            raise RuntimeError("Queues disabled")
+
+        params = _get_rabbit_params()
         self.connection = pika.BlockingConnection(params)
         self.channel = self.connection.channel()
 
@@ -157,7 +182,9 @@ class SentimentRpcClient:
         if self.corr_id == props.correlation_id:
             self.response = body
 
-    def call(self, text: str) -> str:
+    def call(self, text: str, timeout_seconds: int = 5) -> str:
+        rpc_queue = _env("SENTIMENT_RPC_QUEUE", "sentiment_rpc_queue")
+
         self.response = None
         self.corr_id = str(uuid.uuid4())
 
@@ -165,7 +192,7 @@ class SentimentRpcClient:
 
         self.channel.basic_publish(
             exchange="",
-            routing_key=SENTIMENT_RPC_QUEUE,
+            routing_key=rpc_queue,
             properties=pika.BasicProperties(
                 reply_to=self.callback_queue,
                 correlation_id=self.corr_id,
@@ -174,17 +201,9 @@ class SentimentRpcClient:
             body=payload,
         )
 
-        # -----------------------------------------------------
-        # 2. FIX: ADD TIMEOUT LOOP
-        # Don't wait forever if the sentiment service is offline!
-        # -----------------------------------------------------
         start_time = time.time()
-        timeout_seconds = 5  # Wait max 5 seconds
-
         while self.response is None:
             self.connection.process_data_events(time_limit=1)
-            
-            # Check for timeout
             if time.time() - start_time > timeout_seconds:
                 raise TimeoutError("Sentiment RPC timed out (Service offline?)")
 
@@ -192,7 +211,7 @@ class SentimentRpcClient:
         return data.get("sentiment", "Neutral")
 
     def close(self):
-        self.connection.close()
+        _safe_close(self.connection)
 
 
 def check_sentiment_rpc(text: str) -> str:
