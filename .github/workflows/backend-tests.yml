@@ -43,12 +43,9 @@ jobs:
           DB_NAME=simple_social
           DB_USER=simple_social
           DB_PASSWORD=supersecret
+          # Für Container: Host ist "db" (compose service name)
+          DATABASE_URL_LOCAL=postgresql+psycopg://simple_social_LOCAL:supersecret@db:5432/simple_social_LOCAL
           EOF
-
-      - name: Show Docker versions
-        run: |
-          docker version
-          docker compose version
 
       - name: Run API tests
         run: |
@@ -79,12 +76,8 @@ jobs:
           DB_NAME=simple_social
           DB_USER=simple_social
           DB_PASSWORD=supersecret
+          DATABASE_URL_LOCAL=postgresql+psycopg://simple_social_LOCAL:supersecret@db:5432/simple_social_LOCAL
           EOF
-
-      - name: Show Docker versions
-        run: |
-          docker version
-          docker compose version
 
       - name: Run persistence tests
         run: |
