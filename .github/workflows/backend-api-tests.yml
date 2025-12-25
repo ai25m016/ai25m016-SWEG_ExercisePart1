@@ -9,7 +9,7 @@ on:
       - 'release/**'
     paths:
       - 'backend/**'
-      - 'docker-compose.queue.local.yml'
+      - 'docker-compose.local.yml'
       - '.env'
       - '.env.example'
       - '.github/workflows/backend-api-tests.yml'
