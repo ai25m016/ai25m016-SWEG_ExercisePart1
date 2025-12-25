@@ -24,12 +24,7 @@ jobs:
           DB_NAME=test
           DB_USER=test
           DB_PASSWORD=test
-
-          # für docker-compose.local.yml:
-          # backend setzt DATABASE_URL: ${DATABASE_URL_LOCAL}
-          # => innerhalb compose muss Host "db" sein
           DATABASE_URL_LOCAL=postgresql+psycopg://test:test@db:5432/test
-
           RABBITMQ_USER=test
           RABBITMQ_PASSWORD=test
           EOF
@@ -41,18 +36,12 @@ jobs:
           pip install uv
           uv sync --frozen --no-editable
 
-      - name: Bring up DB (api)
-        run: |
-          docker compose --project-directory "${GITHUB_WORKSPACE}" -f docker-compose.local.yml up -d --build db
-
       - name: Run API tests
         working-directory: backend
         env:
-          # conftest sucht docker-compose.local.yml auch selbst,
-          # aber wir geben es explizit:
           COMPOSE_FILE: ../docker-compose.local.yml
         run: |
-          uv run pytest -c pytest.ini tests -m api -q
+          uv run pytest -c pytest.ini tests -m api -vv -s
 
       - name: Docker cleanup (always)
         if: always()
@@ -76,7 +65,6 @@ jobs:
           DB_USER=test
           DB_PASSWORD=test
           DATABASE_URL_LOCAL=postgresql+psycopg://test:test@db:5432/test
-
           RABBITMQ_USER=test
           RABBITMQ_PASSWORD=test
           EOF
@@ -118,7 +106,6 @@ jobs:
           DB_USER=test
           DB_PASSWORD=test
           DATABASE_URL_LOCAL=postgresql+psycopg://test:test@db:5432/test
-
           RABBITMQ_USER=test
           RABBITMQ_PASSWORD=test
           EOF
@@ -137,6 +124,86 @@ jobs:
           RESIZER_BASE_URL: http://127.0.0.1:8000
         run: |
           uv run pytest -c pytest.ini tests -m resizer -vv -s
+
+      - name: Docker cleanup (always)
+        if: always()
+        run: |
+          docker compose --project-directory "${GITHUB_WORKSPACE}" -f docker-compose.local.yml down -v || true
+
+  textgen:
+    name: textgen
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Create .env for compose (CI)
+        run: |
+          cat > .env <<'EOF'
+          DB_NAME=test
+          DB_USER=test
+          DB_PASSWORD=test
+          DATABASE_URL_LOCAL=postgresql+psycopg://test:test@db:5432/test
+          RABBITMQ_USER=test
+          RABBITMQ_PASSWORD=test
+          EOF
+
+      - name: Install backend deps (uv)
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install uv
+          uv sync --frozen --no-editable
+
+      - name: Run textgen tests
+        working-directory: backend
+        env:
+          COMPOSE_FILE: ../docker-compose.local.yml
+        run: |
+          uv run pytest -c pytest.ini tests -m textgen -vv -s
+
+      - name: Docker cleanup (always)
+        if: always()
+        run: |
+          docker compose --project-directory "${GITHUB_WORKSPACE}" -f docker-compose.local.yml down -v || true
+
+  sentiment:
+    name: sentiment
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Create .env for compose (CI)
+        run: |
+          cat > .env <<'EOF'
+          DB_NAME=test
+          DB_USER=test
+          DB_PASSWORD=test
+          DATABASE_URL_LOCAL=postgresql+psycopg://test:test@db:5432/test
+          RABBITMQ_USER=test
+          RABBITMQ_PASSWORD=test
+          EOF
+
+      - name: Install backend deps (uv)
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install uv
+          uv sync --frozen --no-editable
+
+      - name: Run sentiment tests
+        working-directory: backend
+        env:
+          COMPOSE_FILE: ../docker-compose.local.yml
+        run: |
+          uv run pytest -c pytest.ini tests -m sentiment -vv -s
 
       - name: Docker cleanup (always)
         if: always()
