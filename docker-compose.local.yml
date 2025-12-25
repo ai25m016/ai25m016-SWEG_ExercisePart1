@@ -11,6 +11,11 @@ services:
       - social_db_data_local:/var/lib/postgresql/data
     ports:
       - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
 
   rabbitmq:
     image: rabbitmq:3-management
@@ -39,7 +44,7 @@ services:
       rabbitmq:
         condition: service_healthy
       db:
-        condition: service_started
+        condition: service_healthy
     env_file:
       - .env
     environment:
@@ -52,7 +57,6 @@ services:
       SENTIMENT_RPC_QUEUE: sentiment_rpc_queue
       IMAGES_DIR: /app/backend/images
       SENTIMENT_SERVICE_URL: "http://sentiment-analysis:8001/predict"
-      # DISABLE_QUEUE: "true"   # optional: schaltet Queues komplett ab
     ports:
       - "8000:8000"
     volumes:
@@ -112,7 +116,6 @@ services:
       TEXT_GENERATION_QUEUE: text_generation
       BACKEND_BASE_URL: http://backend:8000
       TEXTGEN_MODEL: distilgpt2
-      # TEXTGEN_DUMMY: "1"
       HF_HOME: /hf_cache
       PYTHONUNBUFFERED: "1"
     volumes:
