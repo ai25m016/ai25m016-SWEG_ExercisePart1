@@ -50,6 +50,7 @@ jobs:
 
   persistence:
     name: persistence
+    needs: api
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -91,6 +92,7 @@ jobs:
 
   resizer:
     name: resizer
+    needs: api
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -132,6 +134,7 @@ jobs:
 
   textgen:
     name: textgen
+    needs: api
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -172,6 +175,7 @@ jobs:
 
   sentiment:
     name: sentiment
+    needs: api
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
