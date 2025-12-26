@@ -100,7 +100,7 @@ services:
 
   ml-worker:
     build:
-      context: ./ml_worker
+      context: ./text_gen
       dockerfile: Dockerfile
     image: simple-social-ml-worker
     container_name: simple-social-ml-worker

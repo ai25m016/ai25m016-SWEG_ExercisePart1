@@ -90,9 +90,9 @@ services:
 
   ml-worker:
     build:
-      context: ./ml_worker
+      context: ./text_gen
       dockerfile: Dockerfile
-    image: ghcr.io/ai25m016/simple-social-ml-worker:${ML_WORKER_TAG:-latest}
+    image: ghcr.io/ai25m016/simple-social-ml-worker:${TEXT_GEN_TAG:-latest}
     container_name: simple-social-ml-worker
     restart: always
     depends_on:
