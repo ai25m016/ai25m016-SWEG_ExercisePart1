@@ -2,10 +2,9 @@
   "name": "frontend",
   "version": "1.0.0",
   "devDependencies": {
-    "@playwright/test": "^1.0.0"
+    "@playwright/test": "^1.57.0"
   },
   "scripts": {
     "test:e2e": "playwright test"
   }
 }
-
