@@ -2,60 +2,39 @@ from __future__ import annotations
 
 import os
 from typing import Optional
-from pathlib import Path
 from datetime import datetime
 
 from sqlmodel import SQLModel, create_engine, Session, select
 
 from .models import Post, TextGenJob
 
-DEFAULT_DB_PATH = Path(__file__).resolve().parent.parent.parent / "social.db"
-DB_PATH = Path(os.getenv("DB_PATH", str(DEFAULT_DB_PATH)))
+
+ENGINE = None  # wird lazy erzeugt
 
 
 def _create_engine():
-    if os.getenv("DB_PATH"):
-        return create_engine(
-            f"sqlite:///{DB_PATH}",
-            echo=False,
-            connect_args={"check_same_thread": False},
+    """
+    ✅ NUR Postgres – KEIN SQLite.
+    Engine wird lazy gebaut, damit pytest collection nicht crasht.
+    """
+    url = os.getenv("DATABASE_URL")
+    if not url:
+        raise RuntimeError(
+            "Keine Datenbank-URL gesetzt. Bitte setze DATABASE_URL "
+            "(SQLite/social.db ist deaktiviert)."
         )
-
-    def _running_in_docker() -> bool:
-        if Path("/.dockerenv").exists():
-            return True
-        try:
-            cgroup = Path("/proc/1/cgroup")
-            if cgroup.exists() and "docker" in cgroup.read_text().lower():
-                return True
-        except Exception:
-            pass
-        return False
-
-    database_url = os.getenv("DATABASE_URL")
-    database_url_local = os.getenv("DATABASE_URL_LOCAL")
-
-    if _running_in_docker():
-        if database_url:
-            return create_engine(database_url, echo=False, pool_pre_ping=True)
-        if database_url_local:
-            return create_engine(database_url_local, echo=False, pool_pre_ping=True)
-
-    if database_url_local and ("@localhost" in database_url_local or "@127.0.0.1" in database_url_local):
-        return create_engine(database_url_local, echo=False, pool_pre_ping=True)
-
-    return create_engine(
-        f"sqlite:///{DB_PATH}",
-        echo=False,
-        connect_args={"check_same_thread": False},
-    )
-
-
-ENGINE = _create_engine()
-
+    return create_engine(url, echo=False, pool_pre_ping=True)
 
 def get_engine():
+    global ENGINE
+    if ENGINE is None:
+        ENGINE = _create_engine()
     return ENGINE
+
+def reset_engine_for_tests():
+    """Optional: für Tests/Reloads, falls sich DATABASE_URL ändert."""
+    global ENGINE
+    ENGINE = None
 
 
 def init_db():
@@ -130,7 +109,7 @@ def set_post_thumbnail(post_id: int, image_small: str) -> dict | None:
 
 
 # ---------------------------
-# TextGenJob (Pre-Post Suggest)
+# TextGenJob
 # ---------------------------
 
 def create_textgen_job(prompt: str, max_new_tokens: int) -> dict:

@@ -1,27 +1,26 @@
 [project]
-name = "simple-social-resizer"
+name = "simple-social-textgen"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
   "pika>=1.3.2",
-  "requests",
-  "pillow",
   "python-dotenv",
+  "requests",
+  "torch==2.2.2",
+  "transformers>=4.40.0",
 ]
 
 [project.optional-dependencies]
 dev = [
   "pytest",
-  "pytest-mock",
-  "requests-mock",
 ]
 
 [project.scripts]
-social-resizer = "simple_social_resizer.main:main"
+social-textgen = "simple_social_textgen.main:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/simple_social_resizer"]
+packages = ["src/simple_social_textgen"]

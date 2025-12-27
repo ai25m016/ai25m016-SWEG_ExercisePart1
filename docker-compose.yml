@@ -1,0 +1,144 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: simple-social-db
+    restart: always
+    environment:
+      POSTGRES_DB: ${DB_NAME:-test}
+      POSTGRES_USER: ${DB_USER:-test}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-test}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: simple-social-rabbitmq
+    restart: always
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: test
+      RABBITMQ_DEFAULT_PASS: test
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file:
+      - ./backend/.env.compose
+    image: simple-social-backend
+    pull_policy: never
+    container_name: simple-social-backend
+    restart: always
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    environment:
+      IMAGE_RESIZE_QUEUE: image_resize
+      TEXT_GENERATION_QUEUE: text_generation
+      SENTIMENT_RPC_QUEUE: sentiment_rpc_queue
+      IMAGES_DIR: /app/backend/images
+      SENTIMENT_SERVICE_URL: "http://sentiment-analysis:8001/predict"
+      HOST: "0.0.0.0"
+      PORT: "8000"
+    # command: ["social-api"]   # optional; sonst Dockerfile-CMD
+    ports:
+      - "8000:8000"
+    volumes:
+      - images_data:/app/backend/images
+
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: simple-social-frontend
+    container_name: simple-social-frontend
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "5500:80"
+
+  image-resizer:
+    build:
+      context: ./image_resizer
+      dockerfile: Dockerfile
+    image: simple-social-image-resizer
+    container_name: simple-social-image-resizer
+    restart: always
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: test
+      RABBITMQ_PASSWORD: test
+      IMAGE_RESIZE_QUEUE: image_resize
+      BACKEND_BASE_URL: http://backend:8000
+      IMAGES_DIR: /app/backend/images
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - images_data:/app/backend/images
+
+  text_gen:
+    build:
+      context: ./text_gen
+      dockerfile: Dockerfile
+    image: simple-social-ml-worker
+    container_name: simple-social-ml-worker
+    restart: always
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: test
+      RABBITMQ_PASSWORD: test
+      TEXT_GENERATION_QUEUE: text_generation
+      BACKEND_BASE_URL: http://backend:8000
+      TEXTGEN_MODEL: distilgpt2
+      HF_HOME: /hf_cache
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - hf_cache:/hf_cache
+
+  sentiment-analysis:
+    image: ghcr.io/moerz1423/sentiment-analysis:latest
+    container_name: simple-social-sentiment
+    restart: always
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    ports:
+      - "8001:8001"
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: test
+      RABBITMQ_PASSWORD: test
+      SENTIMENT_RPC_QUEUE: sentiment_rpc_queue
+      PYTHONUNBUFFERED: "1"
+
+volumes:
+  pg_data:
+  images_data:
+  hf_cache:

@@ -1,322 +1,124 @@
 # 🌐 Simple Social – Fullstack Demo
 
-FastAPI + Frontend + Docker + Playwright + GitHub Actions + Orchestrierung
+FastAPI + Frontend + Docker Compose + Playwright + GitHub Actions
 
-Ein modernes Fullstack-Projekt zur Demonstration von REST-API-Entwicklung, Containerisierung, automatisierten Tests, Multi-Service-Orchestrierung und CI/CD-Pipelines.
+Ein modernes Fullstack-Projekt zur Demonstration von REST-API-Entwicklung, Containerisierung, automatisierten Tests, Multi-Service-Orchestrierung und CI/CD.
 
 ## 🚀 Features
 
 ### 🧠 Backend (FastAPI)
-- SQLModel + SQLite
+- SQLModel + **Postgres**
 - CRUD-Endpunkte
-- Seed-Script (social-seed)
-- Automatische OpenAPI-Dokumentation
-→ /docs, /redoc
+- Seed-Script (`social-seed`)
+- OpenAPI-Doku: `/docs`, `/redoc`
+- Queue-Integration (RabbitMQ) für:
+  - Image-Resizing (Worker)
+  - Text-Generation (Worker)
+- Sentiment-Analyse via RabbitMQ RPC
 
 ### 🎨 Frontend
-- Einfaches HTML/JS-Frontend
+- Einfaches HTML/JS-Frontend (Nginx Container)
 - End-to-End Tests mit Playwright
 
 ### 🧪 Testing
-- Backend Tests (pytest)
+- Backend Tests (pytest) mit Markern:
+  - `api`, `persistence`, `resizer`, `textgen`, `sentiment`
 - Frontend E2E Tests (Playwright)
-- Docker-basierte Test-Pipelines
-- Server-Orchestration Tests (Backend + Frontend + DB)
-
-🐳 Docker & Orchestrierung
-- Backend-Image
-- Frontend-Image
-- Lokale Entwicklung (Backend + Frontend)
-- Vollständige Orchestrierung (Backend + Frontend + Postgres)
-- Persistente Volumes
-
-### ⚙️ GitHub Actions
-- 8 vollständige CI/CD Workflows:
-  - Backend Tests (ohne Docker)
-  - Backend Tests (Docker)
-  - Backend Release Image
-  - Frontend Tests (ohne Docker)
-  - Frontend Tests (Docker)
-  - Frontend Release Image
-  - Branch + Issue Validation
-  - Issue → Branch Automation
-
-### 🔐 Git Hooks
-- Commit Message Validator
-- Branch Name Validator
-- Integration mit Test-Skripten
+- Docker-basierte Integrationstests (Compose)
 
 ## 🛠️ Installation
-### 🔧 Backend installieren
+Hinweis: Das Backend braucht immer eine Postgres-DB.
+Für Quickstart & Integrationstests wird Docker benötigt.
+
+### Backend Dependencies
 ```
-py -m uv sync
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -U pip
+pip install -r requirements.txt
+pip install -r requirements-dev.txt
 ```
 
-### 🎭 Frontend installieren
+
+
+### Frontend Dependencies
 ```
 cd frontend
 npm install
 npx playwright install
 ```
 
-## 🧩 Lokaler Betrieb
-### 🧩 RabbitMQ starten (Docker)
-```
-docker run --rm -it --name rabbitmq -p 5672:5672 -p 15672:15672 rabbitmq:3-management
-```
-#### 📍 Web UI: 
-- http://localhost:15672 (guest/guest)
 
-### 🧩 Image-Resizer starten (lokal per Python)
+### ✅ Quickstart (empfohlen): Alles mit Docker Compose starten
+Start im Repo-Root:
 ```
-.\.venv\Scripts\activate
-social-resizer
+docker compose up -d --build
 ```
-
-
-### 🧩 Backend starten
+Stop:
 ```
-cd backend
-$env:RABBITMQ_HOST="127.0.0.1"
-$env:IMAGE_RESIZE_QUEUE="image_resize"
-py -m uv run social-api
+docker compose down
 ```
-
-### 📍 API läuft:
-- http://localhost:8000
-- http://localhost:8000/docs
-- http://localhost:8000/redoc
-
-
-## 🧪 Backend testen
+Stop inkl. Volumes/Daten löschen:
 ```
-cd backend
-py -m uv run pytest -q
-```
-
-## 🎭 Frontend E2E Tests
-```
-cd frontend
-npx playwright test
+docker compose down -v
 ```
 
 
-## 🐳 Betrieb mit Docker
+Danach laufen typischerweise:
+- Backend: http://localhost:8000 (Docs: http://localhost:8000/docs)
+- Frontend: http://localhost:5500
+- Postgres: localhost:5432
+- RabbitMQ: localhost:5672 (UI: http://localhost:15672)
+- Sentiment Service: http://localhost:8001
 
 
-### 🐳 Docker Compose lokales Image
+## 🧪 Backend Tests (pytest)
 
-### 🐳 Docker Compose Github Image
-
-
-
-### 🧪 Backend testen
+Empfehlung: Backend-Tests ausführen, nachdem Docker verfügbar ist (die Tests starten Postgres/Services je nach Marker).
 ```
-cd backend
-py -m uv run pytest -q
+pytest -m api -q
+pytest -m persistence -q
+pytest -m resizer -q
+pytest -m textgen -q
+pytest -m sentiment -q
 ```
 
-### 🎭 Frontend E2E Tests
+## 🎭 Frontend E2E Tests (Playwright)
+Vorher Backend starten:
+```
+docker compose up -d db rabbitmq sentiment-analysis backend
+```
+Anschließend testen:
 ```
 cd frontend
 npx playwright test
 ```
 
 
-Startet:
-| Service  | Port |
-| -------- | ---  |
-| Backend  | 8000 |
-| Frontend | 5500 |
+## 🤖 GitHub Actions – was wirklich im Repo ist
+Workflows unter `.github/workflows/`:
+- `backend-tests.yml` (Matrix: suite = api|persistence|resizer|textgen|sentiment)
+- `release-image.yml`
+- `validate-branch-issue.yml`
+- `create-issue-branch.yml`
 
+## 🔐 Git Hooks
 
-
-
-
-
-
-Services:
-| Service  | Port | Beschreibung          |
-| -------- | ---- | --------------------- |
-| Backend  | 8000 | FastAPI               |
-| Frontend | 5500 | Nginx Static Frontend |
-| Postgres | 5432 | Persistente Datenbank (`social_db_data`)|
-
-
-
-
-## 🧪 Orchestrierte Tests (Backend + Frontend + DB)
-
-Alle Testskripte befinden sich unter `scripts/run_tests.sh`.
-
-### Backend in Orchestrierung testen
-```
-./scripts/run_tests.sh backend-orch
-```
-
-### Frontend in Orchestrierung testen
-```
-./scripts/run_tests.sh frontend-orch
-```
-
-### Alle Tests (lokal, Docker, Orchestrierung)
-```
-./scripts/run_tests.sh all
-```
-
-Dies führt in Reihenfolge aus:
-1. Backend lokal
-2. Frontend lokal
-3. Backend im Docker-Image
-4. Frontend im Docker-Image
-5. Backend orchestration
-6. Frontend orchestration
-
-Damit wird garantiert, dass das System **immer** konsistent funktioniert.
-
-## 🌱 Seed Script
-
-Testdaten einfügen:
-```
-py -m uv run social-seed
-```
-
-Erzeugt drei Beispiel-Posts.
-
-
-# 📁 Projektstruktur
-```
-simple_social/
-├── backend/
-│   ├── src/simple_social_backend/
-│   ├── tests/test_api.py
-│   ├── main.py
-│   ├── social.db
-│   ├── pyproject.toml
-│   └── uv.lock
-│
-├── frontend/
-│   ├── index.html
-│   ├── tests/posts.spec.js
-│   ├── package.json
-│   └── node_modules/
-│
-├── .github/workflows/
-│   ├── backend-tests.yml
-│   ├── backend-docker.yml
-│   ├── backend-release.yml
-│   ├── backend-orch.yml
-│   ├── frontend-tests.yml
-│   ├── frontend-docker.yml
-│   ├── frontend-release.yml
-│   ├── frontend-orch.yml
-│   ├── validate-branch-issue.yml
-│   └── create-issue-branch.yml
-│
-├── hooks/commit-msg
-├── scripts/install_hooks.sh
-├── .env
-├── docker-compose.local.yml
-├── docker-compose.orch.local.yml
-├── docker-compose.orch.yml
-├── docker-compose.yml
-└── README.md
-```
-
-## 🤖 GitHub Actions – Übersicht
-### 🧪 Backend Tests (no Docker)
-
-→ `backend-tests.yml`
-Läuft bei Push + PR auf:
-`feature/*`, `bugfix/*`, `hotfix/*`, `docs/*`, `release/*`, `develop`, `main`
-
-### 🐳🧪 Backend Tests (Docker)
-→ `backend-docker.yml`
-- Baut Image
-- Führt pytest im Container aus
-- Optional: push von Docker Images
-
-### 🚀 Backend Release
-→ `backend-release.yml`
-- läuft nur bei Tags:
-  - `vX.Y.Z`
-  - `vX.Y.Z-rcN`
-
-- pushed nach GHCR:
-  - `simple-social-backend:<tag>`
-  - `:latest` bei final Release
-
-
-### 🎭 Frontend Tests (no Docker)
-→ `frontend-tests.yml`
-
-### 🎭🐳 Frontend Tests (Docker)
-→ `frontend-docker.yml`
-
-### 🚀 Frontend Release
-→ `frontend-release.yml`
-
-Pusht Image nach GHCR.
-
-### 🕵️ Branch & Commit Validator
-→ `validate-branch-and-issue.yml`
-
-Prüft:
-- Branch Format
-- Commit Message enthält Issue-Nummer
-- Keine Pflicht für Releases
-
-
-### 🧵 Issue → Branch Automation
-→ `create-issue-branch.yml`
-Erzeugt automatisch:
-```
-feature/<ISSUE>-kürzer-titel
-```
-
-
-🧭 Branch-Namenskonventionen
-
-|    Typ  |          Muster	             |      Beispiel         |
-| :------ | :--------------------------: | --------------------: |
-| Feature | feature/<ISSUE>-beschreibung | feature/12-login-form |
-| Bugfix  | bugfix/<ISSUE>-beschreibung  | bugfix/7-null-bug     |
-| Hotfix  | hotfix/<ISSUE>-beschreibung  | hotfix/3-prod-crash   |
-| Docs    | docs/<ISSUE>-beschreibung    | docs/5-update-readme  |
-| Release | release/X.Y.Z(-rcN)          | release/3.0.0-rc1     |
-
-❗ Releases dürfen keine Issue-Nummer enthalten.
-
-
-
-## ✍️ Commit-Message-Regeln
-### Auf feature/bugfix/hotfix/docs:
-✔ Erste Zeile MUSS die Issue-Nummer enthalten:
-```
-Login-Button hinzugefügt (#12)
-```
-### Auf release/X.Y.Z:
-
-✔ Keine Issue-Pflicht:
-```
-Release 3.0.0 vorbereitet
-```
-### 🔧 Git Hooks
+Vorhanden im Repo:
+- `hooks/commit-msg`
+- `hooks/pre-push`
 
 Setup:
 ```
 ./scripts/install_hooks.sh
 ```
-### 🔧 Git Hooks
 
-Konfiguration:
-```
-git config --local hook.tests backend
-git config --local hook.tests backend-docker
-git config --local hook.tests backend-orch
-git config --local hook.tests frontend
-git config --local hook.tests frontend-docker
-git config --local hook.tests frontend-orch
-git config --local hook.tests all
-git config --local hook.tests none
-```
+## 📁 Projektstruktur (gekürzt)
+- `backend/` (FastAPI + pytest + uv)
+- `frontend/` (Static + Playwright)
+- `image_resizer/` (Worker)
+- `text_gen/` (Worker)
+- `sentiment_analysis/` (Service)
+- `docker-compose.yml` (lokaler Build-Stack)
+- `docker-compose.github.yml` (GHCR Images + Tags)
+- .github/workflows/ (CI)

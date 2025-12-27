@@ -1,0 +1,123 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: simple-social-db-orch-local
+    restart: always
+    environment:
+      POSTGRES_DB: ${DB_NAME}_LOCAL
+      POSTGRES_USER: ${DB_USER}_LOCAL
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - social_db_data_local:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: ghcr.io/ai25m016/simple-social-backend:${BACKEND_TAG:-latest}
+    container_name: simple-social-backend-orch-local
+    restart: always
+    depends_on:
+      - db
+      - rabbitmq          # Backend braucht RabbitMQ für Events
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: test
+      RABBITMQ_PASSWORD: test
+      IMAGE_RESIZE_QUEUE: image_resize
+      TEXT_GENERATION_QUEUE: text_generation
+      SENTIMENT_SERVICE_URL: "http://sentiment-analysis:8001/predict"
+      # DISABLE_QUEUE: "false"
+    ports:
+      - "8000:8000"
+    volumes:
+      - images_data:/app/backend/images
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: ghcr.io/ai25m016/simple-social-frontend:${FRONTEND_TAG:-latest}
+    container_name: simple-social-frontend
+    restart: always
+    depends_on:
+      - backend
+    ports:
+      - "5500:80"
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: simple-social-rabbitmq
+    restart: always
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    environment:
+      RABBITMQ_DEFAULT_USER: test
+      RABBITMQ_DEFAULT_PASS: test
+
+  image-resizer:
+    build:
+      context: ./image_resizer
+      dockerfile: Dockerfile
+    image: ghcr.io/ai25m016/simple-social-image-resizer:${IMAGE_RESIZER_TAG:-latest}
+    container_name: simple-social-image-resizer
+    restart: always
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: test
+      RABBITMQ_PASSWORD: test
+      IMAGE_RESIZE_QUEUE: image_resize
+      BACKEND_BASE_URL: http://backend:8000
+      IMAGES_DIR: /app/backend/images
+    volumes:
+      - images_data:/app/backend/images
+
+  ml-worker:
+    build:
+      context: ./text_gen
+      dockerfile: Dockerfile
+    image: ghcr.io/ai25m016/simple-social-ml-worker:${TEXT_GEN_TAG:-latest}
+    container_name: simple-social-ml-worker
+    restart: always
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      backend:
+        condition: service_started
+    environment:
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: test
+      RABBITMQ_PASSWORD: test
+      TEXT_GENERATION_QUEUE: text_generation
+      BACKEND_BASE_URL: http://backend:8000
+      TEXTGEN_MODEL: sshleifer/tiny-gpt2
+
+  sentiment-analysis:
+    build:
+      context: ./sentiment_analysis
+      dockerfile: Dockerfile
+    image: ghcr.io/ai25m016/simple-social-sentiment:${SENTIMENT_TAG:-latest}
+    container_name: simple-social-sentiment
+    restart: always
+    ports:
+      - "8001:8001"
+
+volumes:
+  social_db_data_local:
+  images_data:

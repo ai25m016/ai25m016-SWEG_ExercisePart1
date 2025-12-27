@@ -1,14 +1,13 @@
-FROM python:3.10-slim
-
+FROM python:3.12-slim
 WORKDIR /app
 
-# Install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY pyproject.toml ./
+COPY src/ ./src/
 
-# Copy your model file and code
-# IMPORTANT: Place your .pth file in the sentiment_analysis folder!
+RUN pip install --no-cache-dir -U pip \
+ && pip install --no-cache-dir .
+
 COPY ./models/bert_clean.pth /app/model.pth
-COPY main.py .
+ENV MODEL_PATH=/app/model.pth
 
-CMD ["python", "main.py", "--unbuffered"]
+CMD ["social-sentiment"]

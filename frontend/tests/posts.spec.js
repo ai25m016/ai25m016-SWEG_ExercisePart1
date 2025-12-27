@@ -1,43 +1,61 @@
 // frontend/tests/posts.spec.js
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require("@playwright/test");
+const path = require("path");
 
-const FRONTEND_URL = 'http://127.0.0.1:5500/index.html';
+const FRONTEND_URL = "http://127.0.0.1:5500/index.html";
+const CAT_PNG = path.resolve(__dirname, "fixtures", "cat.png");
 
-test('can create a post and see it in the list', async ({ page }) => {
-  // Open your frontend
+async function createPost(page, { text, user }) {
   await page.goto(FRONTEND_URL);
+  await expect(page.locator("h1")).toHaveText(/Simple Social/i);
 
-  // Fill the form
-  await page.fill('#image', 'cat.png');
-  await page.fill('#text', 'Hello from Playwright!');
-  await page.fill('#user', 'testuser');
+  await page.setInputFiles("#image", CAT_PNG);
+  await page.fill("#text", text);
+  await page.fill("#user", user);
 
-  // Submit
   await page.click('button[type="submit"]');
+  await expect(page.locator("#status")).toContainText("Post erstellt", { timeout: 20000 });
 
-  // Wait a bit for the backend to respond and UI to update
-  await page.waitForTimeout(500);
+  // neu laden damit UI sicher den neuen Stand rendert
+  await page.click("#reload-posts");
+}
 
-  // Check that the new post appears
-  const firstPostText = await page.locator('.post p').last().textContent();
-  expect(firstPostText).toContain('Hello from Playwright!');
+test.describe("Simple Social", () => {
+  test("can create a post and see it in the list", async ({ page }) => {
+    const unique = Date.now();
+    const user = "testuser";
+    const text = `Hello from Playwright! ${unique}`;
 
-  const firstPostUser = await page.locator('.post-user').last().textContent();
-  expect(firstPostUser).toContain('testuser');
+    await createPost(page, { text, user });
+
+    await expect(page.locator("#posts-container")).toContainText(text, { timeout: 20000 });
+    await expect(page.locator("#posts-container")).toContainText(user, { timeout: 20000 });
+  });
+
+  test("filter by user shows only that user's posts", async ({ page }) => {
+    const unique = Date.now();
+    const user = "filteruser";
+    const text = `Filter test ${unique}`;
+
+    await createPost(page, { text, user });
+
+    // Filter setzen und suchen
+    await page.fill("#filter-user", user);
+    await page.click("#filter-button");
+
+    // Warte bis mindestens 1 Post da ist (nach Filter)
+    const usersLocator = page.locator(".post-user");
+    await expect(usersLocator.first()).toHaveText(user, { timeout: 20000 });
+
+    // Jetzt: alle sichtbaren User-Texte einsammeln und prüfen
+    const allUsers = await usersLocator.allTextContents();
+    expect(allUsers.length).toBeGreaterThan(0);
+
+    for (const u of allUsers) {
+      expect(u.trim()).toBe(user);
+    }
+
+    // zusätzlich: unser Post-Text muss vorkommen
+    await expect(page.locator("#posts-container")).toContainText(text, { timeout: 20000 });
+  });
 });
-
-test('filter by user shows only that user\'s posts', async ({ page }) => {
-  await page.goto(FRONTEND_URL);
-
-  // Assumes there is at least one post from "testuser" (from previous test)
-  await page.fill('#filter-user', 'testuser');
-  await page.click('#filter-button');
-
-  await page.waitForTimeout(500);
-
-  const allUsers = await page.locator('.post-user').allTextContents();
-  for (const user of allUsers) {
-    expect(user).toContain('testuser');
-  }
-});
-

@@ -2,7 +2,7 @@
 name = "simple-social-backend"
 version = "0.1.0"
 description = "Backend API for Simple Social"
-readme = "../README.md"          # README liegt im Repo-Root
+readme = "../README.md"
 requires-python = ">=3.12"
 dependencies = [
   "fastapi>=0.121.0",
@@ -14,23 +14,18 @@ dependencies = [
   "python-dotenv",
   "requests",
   "httpx",
+  "pillow>=10.0.0",
 ]
 
 [project.optional-dependencies]
 dev = [
   "pytest",
-  "requests",
-  "pillow",
-  "httpx",
 ]
 
 # deine CLI-Kommandos – jetzt mit NEUEM Paketnamen
 [project.scripts]
 social-seed = "simple_social_backend.cli:seed"
 social-api  = "simple_social_backend.cli:start_api"
-
-[tool.uv]
-package = true
 
 # für src-Layout mit Hatchling: sag ihm, welches Paket gebaut werden soll
 [tool.hatch.build.targets.wheel]

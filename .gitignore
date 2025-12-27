@@ -84,3 +84,11 @@ exporting/
 
 # BERT Modell, zu groß für GitHub
 sentiment_analysis/models/bert_clean.pth
+
+
+# image_resizer: lokale Test-/Beispielbilder
+image_resizer/images/
+image_resizer/images/**
+
+backend/images/
+backend/images/**
