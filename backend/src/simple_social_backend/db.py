@@ -2,39 +2,42 @@ from __future__ import annotations
 
 import os
 from typing import Optional
+from pathlib import Path
 from datetime import datetime
 
 from sqlmodel import SQLModel, create_engine, Session, select
 
-from .models import Post, TextGenJob
+from .models import Post
 
-
-ENGINE = None  # wird lazy erzeugt
+# Lokale SQLite-DB als Fallback
+DB_PATH = Path(__file__).resolve().parent.parent.parent / "social.db"
 
 
 def _create_engine():
-    """
-    ✅ NUR Postgres – KEIN SQLite.
-    Engine wird lazy gebaut, damit pytest collection nicht crasht.
-    """
-    url = os.getenv("DATABASE_URL")
-    if not url:
-        raise RuntimeError(
-            "Keine Datenbank-URL gesetzt. Bitte setze DATABASE_URL "
-            "(SQLite/social.db ist deaktiviert)."
+    database_url = os.getenv("DATABASE_URL")
+
+    if database_url:
+        # z.B. Docker / echte DB
+        return create_engine(
+            database_url,
+            echo=False,
+            pool_pre_ping=True,
         )
-    return create_engine(url, echo=False, pool_pre_ping=True)
+
+    # Lokaler Fallback (nur außerhalb von Docker sinnvoll)
+    return create_engine(
+        f"sqlite:///{DB_PATH}",
+        echo=False,
+        connect_args={"check_same_thread": False},
+    )
+
+
+# Ein globales Engine-Objekt wiederverwenden
+ENGINE = _create_engine()
+
 
 def get_engine():
-    global ENGINE
-    if ENGINE is None:
-        ENGINE = _create_engine()
     return ENGINE
-
-def reset_engine_for_tests():
-    """Optional: für Tests/Reloads, falls sich DATABASE_URL ändert."""
-    global ENGINE
-    ENGINE = None
 
 
 def init_db():
@@ -42,14 +45,9 @@ def init_db():
 
 
 def add_post(image: str, text: str, user: str) -> int:
+    """Neuen Post anlegen und die ID zurückgeben."""
     with Session(get_engine()) as session:
-        post = Post(
-            image=image,
-            image_small=None,
-            text=text,
-            user=user,
-            created_at=datetime.now(),
-        )
+        post = Post(image=image, text=text, user=user, created_at=datetime.now())
         session.add(post)
         session.commit()
         session.refresh(post)
@@ -57,19 +55,28 @@ def add_post(image: str, text: str, user: str) -> int:
 
 
 def get_latest_post() -> dict | None:
+    """Neuesten Post nach created_at (und id) zurückgeben."""
     with Session(get_engine()) as session:
-        stmt = select(Post).order_by(Post.created_at.desc(), Post.id.desc()).limit(1)
+        stmt = (
+            select(Post)
+            .order_by(Post.created_at.desc(), Post.id.desc())
+            .limit(1)
+        )
         post = session.exec(stmt).first()
         return post.model_dump() if post else None
 
 
 def get_post_by_id(post_id: int) -> dict | None:
+    """Einen einzelnen Post per ID holen."""
     with Session(get_engine()) as session:
         post = session.get(Post, post_id)
         return post.model_dump() if post else None
 
 
 def get_all_posts(user: Optional[str] = None) -> list[dict]:
+    """
+    Alle Posts zurückgeben, optional gefiltert nach user.
+    """
     with Session(get_engine()) as session:
         stmt = select(Post)
         if user is not None:
@@ -80,6 +87,9 @@ def get_all_posts(user: Optional[str] = None) -> list[dict]:
 
 
 def search_posts(query: str) -> list[dict]:
+    """
+    Posts zurückgeben, bei denen der Text die query enthält.
+    """
     with Session(get_engine()) as session:
         stmt = select(Post).where(Post.text.contains(query))
         posts = session.exec(stmt).all()
@@ -87,6 +97,11 @@ def search_posts(query: str) -> list[dict]:
 
 
 def delete_post(post_id: int) -> bool:
+    """
+    Löscht einen Post mit der gegebenen ID.
+    Gibt True zurück, wenn etwas gelöscht wurde,
+    sonst False (Post nicht gefunden).
+    """
     with Session(get_engine()) as session:
         post = session.get(Post, post_id)
         if post is None:
@@ -94,53 +109,3 @@ def delete_post(post_id: int) -> bool:
         session.delete(post)
         session.commit()
         return True
-
-
-def set_post_thumbnail(post_id: int, image_small: str) -> dict | None:
-    with Session(get_engine()) as session:
-        post = session.get(Post, post_id)
-        if post is None:
-            return None
-        post.image_small = image_small
-        session.add(post)
-        session.commit()
-        session.refresh(post)
-        return post.model_dump()
-
-
-# ---------------------------
-# TextGenJob
-# ---------------------------
-
-def create_textgen_job(prompt: str, max_new_tokens: int) -> dict:
-    with Session(get_engine()) as session:
-        job = TextGenJob(
-            prompt=prompt,
-            max_new_tokens=max_new_tokens,
-            status="pending",
-            created_at=datetime.now(),
-        )
-        session.add(job)
-        session.commit()
-        session.refresh(job)
-        return job.model_dump()
-
-
-def get_textgen_job(job_id: int) -> dict | None:
-    with Session(get_engine()) as session:
-        job = session.get(TextGenJob, job_id)
-        return job.model_dump() if job else None
-
-
-def set_textgen_job_result(job_id: int, status: str, generated_text: str | None, error: str | None) -> dict | None:
-    with Session(get_engine()) as session:
-        job = session.get(TextGenJob, job_id)
-        if job is None:
-            return None
-        job.status = status
-        job.generated_text = generated_text
-        job.error = error
-        session.add(job)
-        session.commit()
-        session.refresh(job)
-        return job.model_dump()

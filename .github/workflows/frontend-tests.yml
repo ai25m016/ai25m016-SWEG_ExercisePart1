@@ -1,132 +1,91 @@
-name: frontend test
+name: Frontend E2E (no Docker)
 
 on:
   push:
-    branches:
+    branches: 
       - 'feature/**'
       - 'bugfix/**'
       - 'hotfix/**'
       - 'release/**'
     paths:
       - 'frontend/**'
-      - 'backend/**'
       - '.github/workflows/frontend-tests.yml'
   pull_request:
-    branches:
+    branches: 
       - main
       - develop
-    paths:
-      - 'frontend/**'
-      - 'backend/**'
-      - '.github/workflows/frontend-tests.yml'
 
 jobs:
-  frontend-test:
+  e2e:
+    name: Frontend E2E (no Docker)
     runs-on: ubuntu-latest
 
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_DB: test
-          POSTGRES_USER: test
-          POSTGRES_PASSWORD: test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U test -d test"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 20
+    defaults:
+      run:
+        shell: bash
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
+      # --- Backend: Python + uv + deps ---
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.11"
 
-      - name: Install backend deps
+      - name: Install uv and backend dependencies
+        working-directory: backend
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
+          python -m pip install uv
+          python -m uv sync
 
+      # --- Frontend: Node + Playwright ---
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20"
 
-      - name: Install frontend deps + Playwright
+      - name: Install frontend dependencies & Playwright
         working-directory: frontend
         run: |
           npm ci || npm install
           npx playwright install --with-deps
 
-      - name: Run Playwright E2E
+      # --- Start backend + frontend and run E2E tests ---
+      - name: Run Playwright E2E tests (no Docker)
         env:
           CI: "true"
-          DATABASE_URL: postgresql+psycopg://test:test@127.0.0.1:5432/test
-          DISABLE_QUEUE: "true"
-          RABBITMQ_HOST: "disabled"
         run: |
-          set -euo pipefail
+          set -e
 
           cleanup() {
-            kill "${BACKEND_PID:-}" "${FRONTEND_PID:-}" 2>/dev/null || true
-            echo "--- backend.log (tail) ---"
-            tail -n 200 backend.log 2>/dev/null || true
+            kill "$BACKEND_PID" "$FRONTEND_PID" 2>/dev/null || true
           }
           trap cleanup EXIT
 
-          # Backend starten (direkt aus backend/src)
+          # Start backend (FastAPI) on port 8000
           cd backend
-          export PYTHONPATH=src
-
-          python -m uvicorn simple_social_backend.main:app \
-            --host 127.0.0.1 --port 8000 \
-            > ../backend.log 2>&1 &
+          python -m uv run social-api &
           BACKEND_PID=$!
-          cd ..
 
-          # Sofort prüfen ob Prozess lebt
-          sleep 1
-          if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
-            echo "Backend crashed immediately."
-            cat backend.log || true
-            exit 1
-          fi
-
-          echo "Waiting for backend..."
-          READY=0
-          for i in {1..60}; do
-            if curl -sSf http://127.0.0.1:8000/openapi.json > /dev/null; then
+          echo "Waiting for backend to be ready..."
+          for i in {1..30}; do
+            if curl -sSf http://127.0.0.1:8000/docs > /dev/null; then
               echo "Backend is up!"
-              READY=1
               break
-            fi
-            if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
-              echo "Backend crashed while waiting."
-              cat backend.log || true
-              exit 1
             fi
             sleep 1
           done
 
-          if [ "$READY" -ne 1 ]; then
-            echo "Backend did not become ready in time"
-            cat backend.log || true
-            exit 1
-          fi
-
-          # Frontend static server
-          cd frontend
+          # Start static frontend server on port 5500
+          cd ../frontend
           python -m http.server 5500 &
           FRONTEND_PID=$!
-          cd ..
 
+          echo "Waiting for frontend server..."
           sleep 2
 
-          # Playwright
-          cd frontend
+          # Run Playwright tests (uses your tests in frontend/tests/)
           npx playwright test

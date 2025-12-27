@@ -1,74 +1,147 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Simple Social</title>
+  <title>Simple Social – Frontend</title>
   <style>
-    body { font-family: system-ui, sans-serif; margin: 2rem; background: #f5f5f5; }
-    h1 { margin-bottom: 1rem; }
-    section { background:#fff; padding:1rem 1.5rem; margin-bottom:1.5rem; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,0.08); }
-    label { display:block; margin:0.5rem 0 0.2rem; font-weight:600; }
-    input[type="text"], textarea { width:100%; padding:0.4rem 0.6rem; border-radius:4px; border:1px solid #ccc; box-sizing:border-box; }
-    textarea { min-height:80px; }
-    button { margin-top:0.6rem; padding:0.5rem 1rem; border-radius:4px; border:none; cursor:pointer; background:#2563eb; color:white; font-weight:600; }
-    button.secondary { background:#4b5563; }
-    button.small { padding:0.35rem 0.7rem; font-size:0.9rem; }
-    #status { margin-top:0.5rem; font-size:0.9rem; }
-    .status-ok { color:#16a34a; }
-    .status-error { color:#dc2626; }
-    .posts { display:flex; flex-direction:column; gap:0.75rem; }
-    .post { border:1px solid #e5e7eb; padding:0.75rem; border-radius:6px; background:#f9fafb; }
-    .post-header { display:flex; justify-content:space-between; font-size:0.9rem; margin-bottom:0.4rem; gap:1rem; }
-    .post-user { font-weight:700; }
-    .post-image { max-width:150px; max-height:150px; display:block; margin-top:0.4rem; border-radius:4px; object-fit:cover; }
-    .filters { display:flex; gap:0.5rem; align-items:center; margin-top:0.5rem; flex-wrap:wrap; }
-    .filters input { max-width:200px; }
-
-    .suggest-box {
-      margin-top: 0.6rem;
-      padding: 0.6rem;
-      border-radius: 6px;
-      background: #eef2ff;
-      border: 1px solid #c7d2fe;
-      font-size: 0.95rem;
-      display: none;
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 2rem;
+      background: #f5f5f5;
     }
-    .suggest-actions { display:flex; gap:0.5rem; margin-top:0.5rem; flex-wrap:wrap; }
+
+    h1 {
+      margin-bottom: 1rem;
+    }
+
+    section {
+      background: #fff;
+      padding: 1rem 1.5rem;
+      margin-bottom: 1.5rem;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    label {
+      display: block;
+      margin: 0.5rem 0 0.2rem;
+      font-weight: 600;
+    }
+
+    input[type="text"], textarea {
+      width: 100%;
+      padding: 0.4rem 0.6rem;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
+    }
+
+    textarea {
+      min-height: 60px;
+    }
+
+    button {
+      margin-top: 0.8rem;
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      border: none;
+      cursor: pointer;
+      background: #2563eb;
+      color: white;
+      font-weight: 600;
+    }
+
+    button.secondary {
+      background: #4b5563;
+    }
+
+    #status {
+      margin-top: 0.5rem;
+      font-size: 0.9rem;
+    }
+
+    .status-ok {
+      color: #16a34a;
+    }
+
+    .status-error {
+      color: #dc2626;
+    }
+
+    .posts {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .post {
+      border: 1px solid #e5e7eb;
+      padding: 0.75rem;
+      border-radius: 6px;
+      background: #f9fafb;
+    }
+
+    .post-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.9rem;
+      margin-bottom: 0.4rem;
+    }
+
+    .post-user {
+      font-weight: 700;
+    }
+
+    .post-image {
+      max-width: 150px;
+      max-height: 150px;
+      display: block;
+      margin-top: 0.4rem;
+      border-radius: 4px;
+      object-fit: cover;
+    }
+
+    .filters {
+      display: flex;
+      gap: 0.5rem;
+      align-items: center;
+      margin-top: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .filters input {
+      max-width: 200px;
+    }
   </style>
 </head>
 <body>
   <h1>Simple Social</h1>
 
+  <!-- a) Submit a post -->
   <section>
-    <h2>Post erstellen</h2>
-    <form id="post-form" enctype="multipart/form-data">
-      <label for="image">Bild</label>
-      <input type="file" id="image" name="image" accept="image/*" required />
+    <h2>Submit a post</h2>
+    <form id="post-form">
+      <label for="image">Image URL</label>
+      <input type="text" id="image" name="image" placeholder="images/cat.png" required />
 
       <label for="text">Text</label>
-      <textarea id="text" name="text" placeholder="Schreibe etwas..." required></textarea>
-
-      <div class="suggest-actions">
-        <button type="button" id="btn-suggest" class="secondary small">Kommentar vorschlagen</button>
-        <button type="button" id="btn-apply" class="secondary small" disabled>Übernehmen</button>
-        <button type="button" id="btn-clear-suggest" class="secondary small" disabled>Vorschlag verwerfen</button>
-      </div>
-
-      <div id="suggest-box" class="suggest-box"></div>
+      <textarea id="text" name="text" placeholder="Süße Katze!" required></textarea>
 
       <label for="user">User</label>
-      <input type="text" id="user" name="user" placeholder="alice" value="alice" required />
+      <input type="text" id="user" name="user" placeholder="alice" required />
 
-      <button type="submit">Post erstellen</button>
+      <button type="submit">Create post</button>
     </form>
     <div id="status"></div>
   </section>
 
+  <!-- b + c) List posts & filter by user -->
   <section>
     <h2>Posts</h2>
 
     <div class="filters">
-      <button id="reload-posts" class="secondary">Alle neu laden</button>
+      <button id="reload-posts" class="secondary">Reload all posts</button>
+
       <span>Filter by user:</span>
       <input type="text" id="filter-user" placeholder="alice" />
       <button id="filter-button">Search</button>
@@ -79,7 +152,7 @@
   </section>
 
   <script>
-    // Muss vom Browser erreichbar sein (nicht "http://backend:8000"!)
+    // Adjust this if your backend runs on a different host/port
     const API_BASE = "http://127.0.0.1:8000";
 
     const form = document.getElementById("post-form");
@@ -90,157 +163,23 @@
     const filterButton = document.getElementById("filter-button");
     const clearFilterButton = document.getElementById("clear-filter");
 
-    const textEl = document.getElementById("text");
-    const btnSuggest = document.getElementById("btn-suggest");
-    const btnApply = document.getElementById("btn-apply");
-    const btnClearSuggest = document.getElementById("btn-clear-suggest");
-    const suggestBox = document.getElementById("suggest-box");
-
-    let currentJobId = null;
-    let currentSuggestion = "";
-
     function setStatus(message, ok = true) {
       statusDiv.textContent = message;
       statusDiv.className = ok ? "status-ok" : "status-error";
     }
 
-    function showSuggestion(msg, isError = false) {
-      suggestBox.style.display = "block";
-      suggestBox.style.borderColor = isError ? "#fecaca" : "#c7d2fe";
-      suggestBox.style.background = isError ? "#fef2f2" : "#eef2ff";
-      suggestBox.textContent = msg;
-    }
-
-    function clearSuggestionUI() {
-      currentJobId = null;
-      currentSuggestion = "";
-      suggestBox.style.display = "none";
-      suggestBox.textContent = "";
-      btnApply.disabled = true;
-      btnClearSuggest.disabled = true;
-      btnSuggest.disabled = false;
-    }
-
-    async function pollJob(jobId, maxTries = 20, intervalMs = 700) {
-      for (let i = 0; i < maxTries; i++) {
-        await new Promise(r => setTimeout(r, intervalMs));
-
-        const res = await fetch(`${API_BASE}/textgen/jobs/${jobId}`);
-        if (!res.ok) continue;
-
-        const job = await res.json();
-        if (job.status === "done") {
-          currentSuggestion = job.generated_text || "";
-          showSuggestion("💡 Vorschlag: " + currentSuggestion, false);
-          btnApply.disabled = !currentSuggestion;
-          btnClearSuggest.disabled = false;
-          btnSuggest.disabled = false;
-          return;
-        }
-        if (job.status === "error") {
-          showSuggestion("⚠️ Fehler: " + (job.error || "unknown"), true);
-          btnClearSuggest.disabled = false;
-          btnSuggest.disabled = false;
-          return;
-        }
-
-        showSuggestion("🤖 Generiere Kommentar…", false);
-      }
-
-      showSuggestion("⚠️ Timeout: Textgenerierung dauert zu lange.", true);
-      btnClearSuggest.disabled = false;
-      btnSuggest.disabled = false;
-    }
-
-    btnSuggest.addEventListener("click", async () => {
-      const prompt = (textEl.value || "").trim();
-      if (!prompt) {
-        setStatus("Bitte erst Text eingeben.", false);
-        return;
-      }
-
-      btnSuggest.disabled = true;
-      btnApply.disabled = true;
-      btnClearSuggest.disabled = true;
-      showSuggestion("🤖 Generiere Kommentar…", false);
-
-      try {
-        const res = await fetch(`${API_BASE}/textgen/jobs`, {
-          method: "POST",
-          headers: {"Content-Type":"application/json"},
-          body: JSON.stringify({ prompt, max_new_tokens: 60 })
-        });
-
-        if (!res.ok) {
-          const t = await res.text();
-          throw new Error(t || "TextGen Job konnte nicht gestartet werden");
-        }
-
-        const job = await res.json();
-        currentJobId = job.id;
-        await pollJob(currentJobId);
-
-      } catch (e) {
-        console.error(e);
-        showSuggestion("⚠️ Fehler: " + e.message, true);
-        btnSuggest.disabled = false;
-        btnClearSuggest.disabled = false;
-      }
-    });
-
-    btnApply.addEventListener("click", () => {
-      if (!currentSuggestion) return;
-      textEl.value = currentSuggestion;
-      setStatus("Vorschlag übernommen ✅", true);
-      clearSuggestionUI();
-    });
-
-    btnClearSuggest.addEventListener("click", () => {
-      clearSuggestionUI();
-      setStatus("Vorschlag verworfen.", true);
-    });
-
-    const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-
-    async function waitForThumb(postId, onReady, maxTries = 30, intervalMs = 700) {
-      for (let i = 0; i < maxTries; i++) {
-        await sleep(intervalMs);
-
-        try {
-          const res = await fetch(`${API_BASE}/posts/${postId}`);
-          if (!res.ok) continue;
-          const fresh = await res.json();
-          if (fresh.image_small) {
-            onReady(fresh);
-            return;
-          }
-        } catch (_) {
-          // ignore
-        }
-      }
-    }
-
     function renderPosts(posts) {
       postsContainer.innerHTML = "";
-      if (!Array.isArray(posts) || posts.length === 0) {
-        postsContainer.innerHTML = "<p>Keine Posts gefunden.</p>";
+
+      if (!posts || posts.length === 0) {
+        postsContainer.innerHTML = "<p>No posts found.</p>";
         return;
       }
-
-      const base = API_BASE.replace(/\/+$/, "");
-      const toUrl = (p) => {
-        if (!p) return "";
-        return base + (p.startsWith("/") ? p : "/" + p);
-      };
 
       posts.forEach((post) => {
         const div = document.createElement("div");
         div.className = "post";
 
-        const origUrl = post.image ? toUrl(post.image) : "";
-        const thumbUrl = post.image_small ? toUrl(post.image_small) : "";
-
-        // --- Header: links User, rechts Thumb-Pfad ---
         const header = document.createElement("div");
         header.className = "post-header";
 
@@ -248,68 +187,23 @@
         userSpan.className = "post-user";
         userSpan.textContent = post.user ?? "unknown";
 
-        const rightSpan = document.createElement("span");
-
-        // Rechts nur der Thumbnail-Pfad (klickbar, öffnet Thumb-Datei)
-        const thumbPathLink = document.createElement("a");
-        thumbPathLink.href = thumbUrl || "#";
-        thumbPathLink.target = "_blank";
-        thumbPathLink.rel = "noopener";
-        thumbPathLink.textContent = (post.image_small || "").trim() || "(kein Thumbnail yet)";
-        rightSpan.appendChild(thumbPathLink);
+        const imageSpan = document.createElement("span");
+        imageSpan.textContent = post.image ?? "";
 
         header.appendChild(userSpan);
-        header.appendChild(rightSpan);
+        header.appendChild(imageSpan);
         div.appendChild(header);
 
-        // --- Text ---
         const textP = document.createElement("p");
         textP.textContent = post.text ?? "";
         div.appendChild(textP);
 
-        // --- Bild: Thumbnail anzeigen, Klick -> Original ---
-        if (origUrl || thumbUrl) {
+        if (post.image) {
           const img = document.createElement("img");
           img.className = "post-image";
-
-          // solange thumb fehlt -> original anzeigen (fallback)
-          img.src = thumbUrl || origUrl;
+          img.src = post.image;
           img.alt = "post image";
-
-          // Klick auf Bild öffnet immer Original
-          const a = document.createElement("a");
-          a.href = origUrl || thumbUrl; // falls original aus irgendeinem Grund fehlt
-          a.target = "_blank";
-          a.rel = "noopener";
-          a.appendChild(img);
-
-          div.appendChild(a);
-
-          // Wenn Thumbnail noch nicht da: hint + automatisch updaten
-          if (!post.image_small && post.id != null) {
-            img.style.opacity = "0.7";
-
-            const hint = document.createElement("div");
-            hint.style.fontSize = "0.85rem";
-            hint.style.marginTop = "0.25rem";
-            hint.textContent = "Thumbnail wird erstellt…";
-            div.appendChild(hint);
-
-            waitForThumb(post.id, (fresh) => {
-              const newThumbUrl = toUrl(fresh.image_small);
-              if (!newThumbUrl) return;
-
-              // Thumb anzeigen (cache-buster)
-              img.src = newThumbUrl + `?t=${Date.now()}`;
-              img.style.opacity = "1.0";
-
-              // Rechts oben den Thumb-Pfad aktualisieren
-              thumbPathLink.href = newThumbUrl;
-              thumbPathLink.textContent = fresh.image_small;
-
-              hint.textContent = "Thumbnail fertig ✅";
-            });
-          }
+          div.appendChild(img);
         }
 
         postsContainer.appendChild(div);
@@ -319,79 +213,95 @@
 
     async function loadPosts(userFilter = null) {
       try {
-        const url = userFilter
-          ? `${API_BASE}/posts?user=${encodeURIComponent(userFilter)}`
-          : `${API_BASE}/posts`;
-
-        const res = await fetch(url);
-        if (!res.ok) {
-          const t = await res.text();
-          throw new Error(t || "Posts konnten nicht geladen werden");
+        let url;
+        if (userFilter && userFilter.trim() !== "") {
+          // Use your /users/{user}/posts endpoint for clarity
+          url = `${API_BASE}/users/${encodeURIComponent(userFilter)}/posts`;
+          // Alternative (also valid): `${API_BASE}/posts?user=${encodeURIComponent(userFilter)}`
+        } else {
+          url = `${API_BASE}/posts`;
         }
-
-        const posts = await res.json();
-        renderPosts(posts);
-      } catch (e) {
-        console.error(e);
-        setStatus("Fehler beim Laden der Posts (Console checken).", false);
+    
+        console.log("Fetching posts from:", url);
+    
+        const res = await fetch(url, {
+          method: "GET",           // be explicit
+          // no custom headers → no preflight
+        });
+    
+        console.log("Status:", res.status);
+    
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`Failed to fetch posts: ${res.status} – ${text}`);
+        }
+    
+        const data = await res.json();
+        renderPosts(data);
+      } catch (err) {
+        console.error(err);
+        postsContainer.innerHTML =
+          "<p style='color:#dc2626'>Error loading posts. Check console.</p>";
       }
     }
 
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
+    // a) Handle submit
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
 
-      const fd = new FormData(form);
+      const image = document.getElementById("image").value.trim();
+      const text = document.getElementById("text").value.trim();
+      const user = document.getElementById("user").value.trim();
+
+      if (!image || !text || !user) {
+        setStatus("Please fill out all fields.", false);
+        return;
+      }
+
+      const payload = { image, text, user };
 
       try {
         const res = await fetch(`${API_BASE}/posts`, {
           method: "POST",
-          body: fd,
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
         });
 
         if (!res.ok) {
-          const t = await res.text();
-          throw new Error(t || "Post konnte nicht erstellt werden");
+          const errorText = await res.text();
+          throw new Error(errorText || "Failed to create post");
         }
 
-        setStatus("Post erstellt ✅", true);
-
-        // Optional: Text/Bild leeren, User behalten
-        const userVal = document.getElementById("user").value;
+        setStatus("Post created successfully!", true);
         form.reset();
-        document.getElementById("user").value = userVal;
-
-        clearSuggestionUI();
-
-        // Posts neu laden (Thumbnail updated automatisch via waitForThumb)
-        const currentFilter = (filterInput.value || "").trim();
-        await loadPosts(currentFilter || null);
-
-      } catch (e2) {
-        console.error(e2);
-        setStatus("Fehler: " + e2.message, false);
+        await loadPosts(); // reload list
+      } catch (err) {
+        console.error(err);
+        setStatus("Error creating post: " + err.message, false);
       }
     });
 
-    reloadButton.addEventListener("click", (e) => {
-      e.preventDefault();
-      const currentFilter = (filterInput.value || "").trim();
-      loadPosts(currentFilter || null);
-    });
-
-    filterButton.addEventListener("click", (e) => {
-      e.preventDefault();
-      const u = (filterInput.value || "").trim();
-      loadPosts(u || null);
-    });
-
-    clearFilterButton.addEventListener("click", (e) => {
-      e.preventDefault();
+    reloadButton.addEventListener("click", () => {
       filterInput.value = "";
-      loadPosts(null);
+      loadPosts();
     });
-
+    
+    filterButton.addEventListener("click", () => {
+      const userFilter = filterInput.value.trim();
+      loadPosts(userFilter || null);
+    });
+    
+    clearFilterButton.addEventListener("click", () => {
+      filterInput.value = "";
+      loadPosts();
+    });
+    
     // initial load
-    loadPosts(null);
+    loadPosts();
+
   </script>
 </body>
 </html>
+
