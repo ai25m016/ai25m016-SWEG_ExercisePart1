@@ -46,7 +46,7 @@ def test_textgen_job_is_created_and_can_be_updated(client, monkeypatch):
         calls["prompt"] = prompt
         calls["max_new_tokens"] = max_new_tokens
 
-    import simple_social_backend.api as api
+    import simple_social_backend.main as api
     monkeypatch.setattr(api, "publish_textgen_job", fake_publish_textgen_job, raising=True)
 
     # --- 1) Create job ---
@@ -105,7 +105,7 @@ def test_textgen_publish_failure_marks_job_error(monkeypatch):
     def boom(*args, **kwargs):
         raise RuntimeError("rabbitmq down")
 
-    import simple_social_backend.api as api
+    import simple_social_backend.main as api
     monkeypatch.setattr(api, "publish_textgen_job", boom, raising=True)
 
     # wichtig: exceptions als HTTP 500 bekommen, nicht re-raise

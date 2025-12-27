@@ -1,14 +1,10 @@
 FROM python:3.12-slim
+WORKDIR /app
 
-WORKDIR /app/image_resizer
-
-# Build backend for building the package (hatchling)
-RUN pip install --no-cache-dir hatchling
-
-# Install the resizer package (console script: social-resizer)
 COPY pyproject.toml ./
-COPY src ./src
+COPY src/ ./src/
 
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir -U pip \
+ && pip install --no-cache-dir .
 
 CMD ["social-resizer"]

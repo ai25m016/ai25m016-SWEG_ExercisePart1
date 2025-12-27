@@ -6,6 +6,13 @@ dependencies = [
   "pika>=1.3.2",
   "python-dotenv",
   "requests",
+  "torch==2.2.2",
+  "transformers>=4.40.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest",
 ]
 
 [project.scripts]

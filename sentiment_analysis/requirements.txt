@@ -1,7 +1,0 @@
-fastapi
-uvicorn
-torch
-transformers
-pydantic
-pika
-requests

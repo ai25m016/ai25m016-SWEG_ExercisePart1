@@ -9,7 +9,7 @@ from pathlib import Path
 def find_repo_root(start: Path) -> Path:
     here = start.resolve()
     for p in [here] + list(here.parents):
-        if (p / "docker-compose.local.yml").exists() or (p / "docker-compose.yml").exists():
+        if (p / "docker-compose.yml").exists() or (p / "docker-compose.yml").exists():
             return p
     return here.parents[2]
 
@@ -19,10 +19,10 @@ def pick_compose_file(repo_root: Path) -> Path:
     if override:
         return Path(override).resolve()
 
-    for f in (repo_root / "docker-compose.local.yml", repo_root / "docker-compose.yml"):
+    for f in (repo_root / "docker-compose.yml", repo_root / "docker-compose.yml"):
         if f.exists():
             return f
-    raise FileNotFoundError("Kein docker-compose.local.yml oder docker-compose.yml gefunden.")
+    raise FileNotFoundError("Kein docker-compose.yml oder docker-compose.yml gefunden.")
 
 
 def dc_base(repo_root: Path, compose_file: Path) -> list[str]:

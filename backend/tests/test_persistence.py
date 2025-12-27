@@ -22,8 +22,8 @@ def _pick_compose_file() -> str:
 
     repo_root = Path(__file__).resolve().parents[2]
     candidates = [
-        repo_root / "docker-compose.local.yml",
         repo_root / "docker-compose.yml",
+        repo_root / "docker-compose.github.yml",
     ]
     for p in candidates:
         if p.exists():

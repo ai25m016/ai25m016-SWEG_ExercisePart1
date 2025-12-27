@@ -15,27 +15,26 @@ ENGINE = None  # wird lazy erzeugt
 def _create_engine():
     """
     ✅ NUR Postgres – KEIN SQLite.
-    Aber: Engine wird erst gebaut, wenn wirklich gebraucht.
-    Dadurch crasht pytest collection nicht mehr.
+    Engine wird lazy gebaut, damit pytest collection nicht crasht.
     """
-    database_url = os.getenv("DATABASE_URL")
-    database_url_local = os.getenv("DATABASE_URL_LOCAL")
-
-    url = database_url or database_url_local
+    url = os.getenv("DATABASE_URL")
     if not url:
         raise RuntimeError(
-            "Keine Datenbank-URL gesetzt. Bitte setze DATABASE_URL oder DATABASE_URL_LOCAL "
+            "Keine Datenbank-URL gesetzt. Bitte setze DATABASE_URL "
             "(SQLite/social.db ist deaktiviert)."
         )
-
     return create_engine(url, echo=False, pool_pre_ping=True)
-
 
 def get_engine():
     global ENGINE
     if ENGINE is None:
         ENGINE = _create_engine()
     return ENGINE
+
+def reset_engine_for_tests():
+    """Optional: für Tests/Reloads, falls sich DATABASE_URL ändert."""
+    global ENGINE
+    ENGINE = None
 
 
 def init_db():

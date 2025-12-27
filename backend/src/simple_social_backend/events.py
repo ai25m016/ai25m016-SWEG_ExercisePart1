@@ -47,13 +47,19 @@ def _disabled() -> bool:
     return False
 
 
-def _conn_params() -> "pika.ConnectionParameters":
-    """
-    Short timeouts => no hanging tests / requests.
-    """
-    creds = pika.PlainCredentials(RABBITMQ_USER, RABBITMQ_PASSWORD)
+def _require(name: str) -> str:
+    v = os.getenv(name)
+    if not v:
+        raise RuntimeError(f"Missing env var: {name}")
+    return v
+
+def _conn_params():
+    host = os.getenv("RABBITMQ_HOST", RABBITMQ_HOST)
+    user = os.getenv("RABBITMQ_USER", RABBITMQ_USER)
+    pw   = os.getenv("RABBITMQ_PASSWORD", RABBITMQ_PASSWORD)
+    creds = pika.PlainCredentials(user, pw)
     return pika.ConnectionParameters(
-        host=RABBITMQ_HOST,
+        host=host,
         credentials=creds,
         heartbeat=30,
         blocked_connection_timeout=5,
@@ -61,6 +67,7 @@ def _conn_params() -> "pika.ConnectionParameters":
         retry_delay=0.0,
         socket_timeout=2,
     )
+
 
 
 def _get_channel() -> Tuple["pika.BlockingConnection", "pika.adapters.blocking_connection.BlockingChannel"]:

@@ -9,6 +9,13 @@ dependencies = [
   "python-dotenv",
 ]
 
+[project.optional-dependencies]
+dev = [
+  "pytest",
+  "pytest-mock",
+  "requests-mock",
+]
+
 [project.scripts]
 social-resizer = "simple_social_resizer.main:main"
 

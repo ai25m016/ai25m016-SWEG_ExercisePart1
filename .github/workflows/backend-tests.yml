@@ -8,9 +8,13 @@ permissions:
   contents: read
 
 jobs:
-  api:
-    name: api
+  tests:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [api, persistence, resizer, textgen, sentiment]
+
     steps:
       - uses: actions/checkout@v4
 
@@ -18,198 +22,26 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Create .env for compose (CI)
-        run: |
-          cat > .env <<'EOF'
-          DB_NAME=test
-          DB_USER=test
-          DB_PASSWORD=test
-          DATABASE_URL_LOCAL=postgresql+psycopg://test:test@db:5432/test
-          RABBITMQ_USER=test
-          RABBITMQ_PASSWORD=test
-          EOF
-
-      - name: Install backend deps (uv)
-        working-directory: backend
+      - name: Install deps (dev)
         run: |
           python -m pip install --upgrade pip
-          pip install uv
-          uv sync --frozen --no-editable
+          pip install -r requirements-dev.txt
 
-      - name: Run API tests
-        working-directory: backend
+      - name: Run pytest suite
         env:
-          COMPOSE_FILE: ../docker-compose.local.yml
-        run: |
-          uv run pytest -c pytest.ini tests -m api -vv -s
+          # falls compose Variablen braucht:
+          DB_NAME: test
+          DB_USER: test
+          DB_PASSWORD: test
 
-      - name: Docker cleanup (always)
-        if: always()
-        run: |
-          docker compose --project-directory "${GITHUB_WORKSPACE}" -f docker-compose.local.yml down -v || true
-
-  persistence:
-    name: persistence
-    needs: api
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Create .env for compose (CI)
-        run: |
-          cat > .env <<'EOF'
-          DB_NAME=test
-          DB_USER=test
-          DB_PASSWORD=test
-          DATABASE_URL_LOCAL=postgresql+psycopg://test:test@db:5432/test
-          RABBITMQ_USER=test
-          RABBITMQ_PASSWORD=test
-          EOF
-
-      - name: Install backend deps (uv)
-        working-directory: backend
-        run: |
-          python -m pip install --upgrade pip
-          pip install uv
-          uv sync --frozen --no-editable
-
-      - name: Run persistence tests
-        working-directory: backend
-        env:
-          COMPOSE_FILE: ../docker-compose.local.yml
+          # deine Tests:
+          PERSIST_COMPOSE_FILE: docker-compose.yml
           RESIZER_BASE_URL: http://127.0.0.1:8000
+          PERSIST_BASE_URL: http://127.0.0.1:8000
         run: |
-          uv run pytest -c pytest.ini tests -m persistence -vv -s
+          pytest -q -m "${{ matrix.suite }}"
 
       - name: Docker cleanup (always)
         if: always()
         run: |
-          docker compose --project-directory "${GITHUB_WORKSPACE}" -f docker-compose.local.yml down -v || true
-
-  resizer:
-    name: resizer
-    needs: api
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Create .env for compose (CI)
-        run: |
-          cat > .env <<'EOF'
-          DB_NAME=test
-          DB_USER=test
-          DB_PASSWORD=test
-          DATABASE_URL_LOCAL=postgresql+psycopg://test:test@db:5432/test
-          RABBITMQ_USER=test
-          RABBITMQ_PASSWORD=test
-          EOF
-
-      - name: Install backend deps (uv)
-        working-directory: backend
-        run: |
-          python -m pip install --upgrade pip
-          pip install uv
-          uv sync --frozen --no-editable
-
-      - name: Run resizer tests
-        working-directory: backend
-        env:
-          COMPOSE_FILE: ../docker-compose.local.yml
-          RESIZER_BASE_URL: http://127.0.0.1:8000
-        run: |
-          uv run pytest -c pytest.ini tests -m resizer -vv -s
-
-      - name: Docker cleanup (always)
-        if: always()
-        run: |
-          docker compose --project-directory "${GITHUB_WORKSPACE}" -f docker-compose.local.yml down -v || true
-
-  textgen:
-    name: textgen
-    needs: api
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Create .env for compose (CI)
-        run: |
-          cat > .env <<'EOF'
-          DB_NAME=test
-          DB_USER=test
-          DB_PASSWORD=test
-          DATABASE_URL_LOCAL=postgresql+psycopg://test:test@db:5432/test
-          RABBITMQ_USER=test
-          RABBITMQ_PASSWORD=test
-          EOF
-
-      - name: Install backend deps (uv)
-        working-directory: backend
-        run: |
-          python -m pip install --upgrade pip
-          pip install uv
-          uv sync --frozen --no-editable
-
-      - name: Run textgen tests
-        working-directory: backend
-        env:
-          COMPOSE_FILE: ../docker-compose.local.yml
-        run: |
-          uv run pytest -c pytest.ini tests -m textgen -vv -s
-
-      - name: Docker cleanup (always)
-        if: always()
-        run: |
-          docker compose --project-directory "${GITHUB_WORKSPACE}" -f docker-compose.local.yml down -v || true
-
-  sentiment:
-    name: sentiment
-    needs: api
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Create .env for compose (CI)
-        run: |
-          cat > .env <<'EOF'
-          DB_NAME=test
-          DB_USER=test
-          DB_PASSWORD=test
-          DATABASE_URL_LOCAL=postgresql+psycopg://test:test@db:5432/test
-          RABBITMQ_USER=test
-          RABBITMQ_PASSWORD=test
-          EOF
-
-      - name: Install backend deps (uv)
-        working-directory: backend
-        run: |
-          python -m pip install --upgrade pip
-          pip install uv
-          uv sync --frozen --no-editable
-
-      - name: Run sentiment tests
-        working-directory: backend
-        env:
-          COMPOSE_FILE: ../docker-compose.local.yml
-        run: |
-          uv run pytest -c pytest.ini tests -m sentiment -vv -s
-
-      - name: Docker cleanup (always)
-        if: always()
-        run: |
-          docker compose --project-directory "${GITHUB_WORKSPACE}" -f docker-compose.local.yml down -v || true
+          docker compose down -v || true

@@ -1,3 +1,0 @@
--e backend
--e "backend[dev]"
--e image_resizer

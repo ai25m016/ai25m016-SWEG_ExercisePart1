@@ -124,7 +124,6 @@ def client(docker_postgres):
 
     os.environ["DATABASE_URL"] = pg_url
     os.environ["SQLALCHEMY_DATABASE_URL"] = pg_url
-    os.environ.pop("DATABASE_URL_LOCAL", None)
 
     import importlib
     import simple_social_backend.db as db
@@ -132,8 +131,8 @@ def client(docker_postgres):
 
     _init_schema_via_project_hook()
 
-    import simple_social_backend.api as api
-    importlib.reload(api)
+    import simple_social_backend.main as main
+    importlib.reload(main)
 
     from fastapi.testclient import TestClient
-    return TestClient(api.app)
+    return TestClient(main.app)

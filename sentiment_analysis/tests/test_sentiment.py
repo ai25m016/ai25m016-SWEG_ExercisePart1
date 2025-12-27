@@ -8,7 +8,7 @@ def create_dummy_image():
     return ("test.jpg", io.BytesIO(b"fake_image_content"), "image/jpeg")
 
 def test_create_post_blocks_negative_sentiment(client):
-    with patch("simple_social_backend.api.check_sentiment_rpc", return_value="Negative"):
+    with patch("simple_social_backend.main.check_sentiment_rpc", return_value="Negative"):
         response = client.post(
             "/posts",
             data={"text": "I hate everything", "user": "grumpy_cat"},
@@ -18,8 +18,8 @@ def test_create_post_blocks_negative_sentiment(client):
     assert "Only Positive/Neutral vibes allowed" in response.json()["detail"]
 
 def test_create_post_allows_positive_sentiment(client):
-    with patch("simple_social_backend.api.check_sentiment_rpc", return_value="Positive"), \
-         patch("simple_social_backend.api.publish_image_resize") as mock_resize:
+    with patch("simple_social_backend.main.check_sentiment_rpc", return_value="Positive"), \
+         patch("simple_social_backend.main.publish_image_resize") as mock_resize:
         response = client.post(
             "/posts",
             data={"text": "I love this app!", "user": "happy_dog"},
