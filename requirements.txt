@@ -1,0 +1,4 @@
+-e ./backend
+-e ./image_resizer
+-e ./text_gen
+-e ./sentiment_analysis

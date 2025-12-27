@@ -1,0 +1,4 @@
+-e "./backend[dev]"
+-e "./image_resizer[dev]"
+-e "./text_gen[dev]"
+-e "./sentiment_analysis[dev]"
