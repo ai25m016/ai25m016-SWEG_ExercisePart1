@@ -84,6 +84,11 @@ pytest -m sentiment -q
 ```
 
 ## 🎭 Frontend E2E Tests (Playwright)
+Vorher Backend starten:
+```
+docker compose up -d db rabbitmq sentiment-analysis backend
+```
+Anschließend testen:
 ```
 cd frontend
 npx playwright test
