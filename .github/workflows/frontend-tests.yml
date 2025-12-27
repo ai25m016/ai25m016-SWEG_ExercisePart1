@@ -63,24 +63,39 @@ jobs:
           npm ci || npm install
           npx playwright install --with-deps
 
-      - name: Run Playwright E2E
+            - name: Run Playwright E2E
         env:
           CI: "true"
           DATABASE_URL: postgresql+psycopg://test:test@127.0.0.1:5432/test
           DISABLE_QUEUE: "true"
           RABBITMQ_HOST: "disabled"
         run: |
-          set -e
+          set -euo pipefail
 
           cleanup() {
-            kill "$BACKEND_PID" "$FRONTEND_PID" 2>/dev/null || true
+            kill "${BACKEND_PID:-}" "${FRONTEND_PID:-}" 2>/dev/null || true
+            echo "--- backend.log (tail) ---"
+            tail -n 200 backend.log 2>/dev/null || true
           }
           trap cleanup EXIT
 
-          # Backend starten
+          # Backend starten (ohne uv, ohne install, direkt aus backend/src)
           cd backend
-          python -m simple_social_backend.cli start_api &
+          export PYTHONPATH=src
+
+          python -m uvicorn simple_social_backend.main:app \
+            --host 127.0.0.1 --port 8000 \
+            > ../backend.log 2>&1 &
           BACKEND_PID=$!
+          cd ..
+
+          # Sofort prüfen ob Prozess lebt
+          sleep 1
+          if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
+            echo "Backend crashed immediately."
+            cat backend.log || true
+            exit 1
+          fi
 
           echo "Waiting for backend..."
           READY=0
@@ -90,18 +105,30 @@ jobs:
               READY=1
               break
             fi
+            # falls backend währenddessen stirbt -> logs zeigen
+            if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
+              echo "Backend crashed while waiting."
+              cat backend.log || true
+              exit 1
+            fi
             sleep 1
           done
 
           if [ "$READY" -ne 1 ]; then
             echo "Backend did not become ready in time"
+            cat backend.log || true
             exit 1
           fi
 
           # Frontend static server
-          cd ../frontend
+          cd frontend
           python -m http.server 5500 &
           FRONTEND_PID=$!
+          cd ..
 
           sleep 2
+
+          # Playwright
+          cd frontend
           npx playwright test
+
