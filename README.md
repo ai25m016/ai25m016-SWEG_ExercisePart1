@@ -29,12 +29,13 @@ Ein modernes Fullstack-Projekt zur Demonstration von REST-API-Entwicklung, Conta
 ## 🛠️ Installation (lokale Entwicklung ohne Docker)
 Hinweis: Das Backend braucht immer eine Postgres-DB. Am einfachsten ist Docker Compose (siehe Quickstart).
 
-### Backend Dependencies (uv)
+### Backend Dependencies
 ```
-cd backend
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
 python -m pip install -U pip
-pip install uv
-uv sync --all-extras --dev
+pip install -r requirements.txt
+pip install -r requirements-dev.txt
 ```
 
 
@@ -50,15 +51,15 @@ npx playwright install
 ### ✅ Quickstart (empfohlen): Alles mit Docker Compose starten
 Start im Repo-Root:
 ```
-docker compose -f docker-compose.local.yml up -d --build
+docker compose up -d --build
 ```
 Stop:
 ```
-docker compose -f docker-compose.local.yml down
+docker compose down
 ```
 Stop inkl. Volumes/Daten löschen:
 ```
-docker compose -f docker-compose.local.yml down -v
+docker compose down -v
 ```
 
 
@@ -70,30 +71,16 @@ Danach laufen typischerweise:
 - Sentiment Service: http://localhost:8001
 
 
-## 🌱 Seed Script
-
-Seed in die laufende DB (z. B. wenn Compose läuft):
-```
-cd backend
-uv run social-seed
-```
-
-
 ## 🧪 Backend Tests (pytest)
 
 Empfehlung: Backend-Tests ausführen, nachdem Docker verfügbar ist (die Tests starten Postgres/Services je nach Marker).
 ```
-cd backend
-uv run pytest -m api -q
-uv run pytest -m persistence -q -s
-uv run pytest -m resizer -q -s
-uv run pytest -m textgen -q -s
-uv run pytest -m sentiment -q -s
+pytest -m api -q
+pytest -m persistence -q
+pytest -m resizer -q
+pytest -m textgen -q
+pytest -m sentiment -q
 ```
-Hinweis:
-- `api` nutzt TestClient + Docker-Postgres (kein SQLite).
-- `resizer`/`persistence` starten benötigte Services via Compose.
-
 
 ## 🎭 Frontend E2E Tests (Playwright)
 ```
@@ -105,8 +92,7 @@ npx playwright test
 ## 🤖 GitHub Actions – was wirklich im Repo ist
 Workflows unter `.github/workflows/`:
 - `backend-tests.yml` (Jobs: api, persistence, resizer, textgen, sentiment)
-- `backend-release.yml`
-- `frontend-release.yml`
+- `release-image.yml`
 - `validate-branch-issue.yml`
 - `create-issue-branch.yml`
 
@@ -125,7 +111,7 @@ Setup:
 - `backend/` (FastAPI + pytest + uv)
 - `frontend/` (Static + Playwright)
 - `image_resizer/` (Worker)
-- `ml_worker/` (Worker)
+- `text_gen/` (Worker)
 - `sentiment_analysis/` (Service)
 - `docker-compose.local.yml` (lokaler Build-Stack)
 - `docker-compose.yml` (GHCR Images + Tags)

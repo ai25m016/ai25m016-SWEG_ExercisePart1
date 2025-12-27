@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   api_tests:
-    name: API tests
+    name: api tests
     runs-on: ubuntu-latest
 
     steps:
@@ -41,7 +41,7 @@ jobs:
           docker compose down -v || true
 
   other_tests:
-    name: Other tests (${{ matrix.suite }})
+    name: (${{ matrix.suite }}) tests
     runs-on: ubuntu-latest
     needs: api_tests
 
