@@ -17,7 +17,7 @@ on:
       - develop
     paths:
       - 'frontend/**'
-      - 'backend/**'            
+      - 'backend/**'
       - '.github/workflows/frontend-tests.yml'
 
 jobs:
@@ -47,12 +47,10 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install uv + backend deps
-        working-directory: backend
+      - name: Install backend deps
         run: |
           python -m pip install --upgrade pip
-          pip install uv
-          uv sync --no-editable
+          pip install -r requirements-dev.txt
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -81,13 +79,13 @@ jobs:
 
           # Backend starten
           cd backend
-          uv run social-api &
+          python -m simple_social_backend.cli start_api &
           BACKEND_PID=$!
 
           echo "Waiting for backend..."
           READY=0
           for i in {1..60}; do
-            if curl -sSf http://127.0.0.1:8000/docs > /dev/null; then
+            if curl -sSf http://127.0.0.1:8000/openapi.json > /dev/null; then
               echo "Backend is up!"
               READY=1
               break
