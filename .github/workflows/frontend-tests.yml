@@ -1,4 +1,4 @@
-name: Frontend E2E (no Compose)
+name: frontend test
 
 on:
   push:
@@ -21,7 +21,7 @@ on:
       - '.github/workflows/frontend-tests.yml'
 
 jobs:
-  e2e:
+  frontend test:
     runs-on: ubuntu-latest
 
     services:
@@ -68,8 +68,7 @@ jobs:
       - name: Run Playwright E2E
         env:
           CI: "true"
-          DATABASE_URL: postgresql+psycopg://test:test@postgres:5432/test
-          # damit RabbitMQ/Sentiment-RPC nicht nötig ist:
+          DATABASE_URL: postgresql+psycopg://test:test@127.0.0.1:5432/test
           DISABLE_QUEUE: "true"
           RABBITMQ_HOST: "disabled"
         run: |
